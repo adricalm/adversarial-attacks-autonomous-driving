@@ -1,0 +1,33 @@
+# Runtime output — not for version control
+data/autoware_data/*.log
+data/autoware_data/*_result.json
+data/autoware_data/*_diag.json
+data/autoware_data/traffic_light_verify_result.json
+logs/
+
+# Upstream Autoware reference checkout (not part of this project's repo)
+# See notes/external_autoware_ref.md for remote URL, branch, and commit hash.
+external/autoware/
+
+# Large binary / media data — do not commit
+data/awsim/extracted/
+data/awsim/*.zip
+data/autoware_data/ml_models/
+
+# Map binary files (large; checked out separately)
+data/maps/*.zip
+data/maps/**/*.pcd
+data/maps/**/*.float_backup*
+
+# Leftover Docker-owned dirs (need sudo to delete; safe to ignore)
+data/autoware_data/diag/
+data/autoware_data/loc_src/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor
+.vscode/
+*.swp
