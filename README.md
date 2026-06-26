@@ -177,6 +177,27 @@ sudo docker exec -it autoware_full_test bash
 # then source ROS as above
 ```
 
+### DSGN offline overlay (optional)
+
+Replay Arka's precomputed stereo detections into Autoware without replacing the full perception stack. **Step-by-step commands:** [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
+
+When using `dsgn_offline`, add these **extra** volume mounts to the canonical `docker run`:
+
+| Mount | Why |
+|-------|-----|
+| `-v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro"` | `dsgn_offline` package + `resource/awsim_output_offline/` + `path.txt` |
+| `-v "$HOME/summer26/scripts:/home/aw/scripts:ro"` | `dsgn_offline_build.sh` / `dsgn_offline_run.sh` inside the container |
+
+Build and run (inside container, after mounts are active):
+
+```bash
+bash /home/aw/scripts/dsgn_offline_build.sh
+source /home/aw/ros2_ws/install/setup.bash
+bash /home/aw/scripts/dsgn_offline_run.sh
+```
+
+The canonical Autoware launch flags are unchanged; only add mounts when you need the overlay.
+
 ### AWSIM (inside Docker, with GUI)
 
 AWSIM runs inside Docker (needs GUI access via `DISPLAY`/X11).
@@ -283,7 +304,10 @@ Healthy end state: `state: 5`, `velocity > 0`, MRM `state: 1`, `hazard emergency
 | `data/autoware_data/recover_from_mrm_emergency_stop.sh` | Recover from MRM latch caused by localization degradation |
 | `scripts/find_route_candidates.py` | **Host:** parse OSM map → route JSON |
 | `scripts/apply_route_candidates.sh` | **Host wrapper:** find_route_candidates + apply inside container (needs sudo) |
+| `scripts/dsgn_offline_build.sh` | **Inside Docker** (via `/home/aw/scripts` mount): colcon build `dsgn_offline` overlay |
+| `scripts/dsgn_offline_run.sh` | **Inside Docker:** run offline detection publisher; set `DETECTION_FOLDER` for attack outputs |
 | `scripts/01_gui_preflight.sh` | **Host:** GUI / display sanity checks |
+| `notes/DSGN_OFFLINE_RUNBOOK.md` | Full copy-paste workflow for DSGN offline integration |
 
 ---
 
@@ -306,3 +330,4 @@ See `models/` for experiment configs and the DSGN forks above for perception cod
 - AWSIM Labs v1.6.1: `data/awsim/`
 - AWSIM training data (prior intern): `data/arka/` (on disk only, not in git)
 - Pitfalls, diagnostics chain, changelog: [`notes/DEBUG_LOG.md`](notes/DEBUG_LOG.md)
+- DSGN offline replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md)
