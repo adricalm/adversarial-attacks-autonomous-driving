@@ -80,20 +80,37 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 │   └── awsim/
 │       ├── awsim_labs_v1.6.1.zip
 │       └── extracted/                   # AWSIM binary
+│   └── arka/                            # AWSIM dataset from prior intern (gitignored)
 ├── scripts/
 │   ├── find_route_candidates.py         # host: parse OSM map → route JSON
 │   ├── apply_route_candidates.sh        # host wrapper (needs sudo docker exec)
 │   ├── 01_gui_preflight.sh              # GUI / display sanity check
 │   └── download_autoware_artifacts_from_role.py  # one-time model download
-├── external/autoware/                   # upstream Autoware repo reference
+├── external/
+│   ├── autoware/                        # upstream Autoware reference (gitignored)
+│   └── DSGN_custom/                     # stereo 3D detector — separate git repo (gitignored)
 ├── logs/                                # script output logs (gitignored)
 ├── notes/
 │   └── DEBUG_LOG.md                     # pitfalls, diagnostics chain, changelog
-├── models/                              # reserved for adversarial / ML work
-└── src/                                 # reserved for future code
+├── models/                              # ML configs / experiment notes (weights gitignored)
+└── src/
+    └── dsgn_offline/                    # ROS 2 offline perception bridge — separate git repo (gitignored)
 ```
 
 **Map:** Nishi-Shinjuku (`data/maps/nishishinjuku_autoware_map/`). MGRS grid `54SUE`. Elevation ~40.9 m — never use z=0.
+
+### DSGN repos (separate forks, not part of this repo)
+
+`src/dsgn_offline/` and `external/DSGN_custom/` are **independent git checkouts** from the prior intern’s work, listed in `.gitignore` so this repo does not track them as nested submodules or ghost folders.
+
+| Path | Role | Where to commit changes |
+|------|------|-------------------------|
+| `external/DSGN_custom/` | Train/run DSGN; write detection `.txt` files | Your fork of [DSGN_custom](https://github.com/DF-Autoware-AWSIM/DSGN_custom) |
+| `src/dsgn_offline/` | Publish offline detections into Autoware (`/perception/object_recognition/detection/objects`) | Your fork: [adricalm/dsgn_offline](https://github.com/adricalm/dsgn_offline) (`upstream` = Arka’s repo) |
+
+**Why:** keeps Autoware integration (`summer26`) separate from ML/ROS code you will modify; avoids accidental commits of large datasets or model weights; preserves a clear diff against the prior baseline via `upstream`.
+
+**Workflow:** edit inside the nested repo → `git commit` / `git push` there. Only commit integration docs, scripts, and small configs in `summer26`. Clone the forks locally after a fresh checkout (they are not bundled in this repo).
 
 ---
 
@@ -276,13 +293,16 @@ Healthy end state: `state: 5`, `velocity > 0`, MRM `state: 1`, `hazard emergency
 2. Measure whether perception errors affect **driving behavior** (planning, control).
 3. Evaluate **defense / recovery** methods.
 
-See `models/` and `src/` for future code.
+See `models/` for experiment configs and the DSGN forks above for perception code.
 
 ---
 
 ## External references
 
-- Autoware upstream: `external/autoware/`
+- Autoware upstream: `external/autoware/` (see [`notes/external_autoware_ref.md`](notes/external_autoware_ref.md))
+- DSGN stereo detector: `external/DSGN_custom/` — fork and commit separately (see layout above)
+- DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately (see layout above)
 - Map: Autoware Nishi-Shinjuku sample (`lanelet2_map.osm` + pointcloud)
 - AWSIM Labs v1.6.1: `data/awsim/`
+- AWSIM training data (prior intern): `data/arka/` (on disk only, not in git)
 - Pitfalls, diagnostics chain, changelog: [`notes/DEBUG_LOG.md`](notes/DEBUG_LOG.md)

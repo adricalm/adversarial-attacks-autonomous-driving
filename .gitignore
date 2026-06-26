@@ -1,15 +1,22 @@
-# Runtime output — not for version control
+# Big files
+models/
+data/arka/
+
+# Runtime output 
 data/autoware_data/*.log
 data/autoware_data/*_result.json
 data/autoware_data/*_diag.json
 data/autoware_data/traffic_light_verify_result.json
-logs/
 
-# Upstream Autoware reference checkout (not part of this project's repo)
+# Treated as independent repos (forks from prev student)
+external/DSGN_custom/
+src/dsgn_offline/
+
+# Upstream Autoware reference checkout 
 # See notes/external_autoware_ref.md for remote URL, branch, and commit hash.
 external/autoware/
 
-# Large binary / media data — do not commit
+# Large binary / media data 
 data/awsim/extracted/
 data/awsim/*.zip
 data/autoware_data/ml_models/
@@ -22,6 +29,8 @@ data/maps/**/*.float_backup*
 # Leftover Docker-owned dirs (need sudo to delete; safe to ignore)
 data/autoware_data/diag/
 data/autoware_data/loc_src/
+
+/logs/
 
 # Python
 __pycache__/
