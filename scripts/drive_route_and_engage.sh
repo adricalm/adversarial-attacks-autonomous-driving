@@ -70,8 +70,8 @@ ros2 topic pub --once /initialpose \
   "{header: {frame_id: map}, pose: {pose: {
       position:    {x: ${SX}, y: ${SY}, z: ${SZ}},
       orientation: {x: ${SQX}, y: ${SQY}, z: ${SQZ}, w: ${SQW}}}}}"
-echo "  Waiting 12 s for localisation to settle..."
-sleep 12
+echo "  Waiting 10 s for localisation to settle..."
+sleep 10
 
 # ── 3. Set goal pose ─────────────────────────────────────────────
 echo ""
@@ -83,8 +83,8 @@ ros2 service call /api/routing/set_route_points \
       position:    {x: ${GX}, y: ${GY}, z: ${GZ}},
       orientation: {x: ${GQX}, y: ${GQY}, z: ${GQZ}, w: ${GQW}}},
     waypoints: []}"
-echo "  Waiting 10 s for route/planning to settle..."
-sleep 10
+echo "  Waiting 5 s for route/planning to settle..."
+sleep 5
 
 if [[ "${NO_ENGAGE}" -eq 1 ]]; then
   echo ""

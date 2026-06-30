@@ -81,6 +81,7 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 │       ├── awsim_labs_v1.6.1.zip
 │       └── extracted/                   # AWSIM binary
 │   └── arka/                            # AWSIM dataset from prior intern (gitignored)
+│   └── bags/                            # experiment rosbags (gitignored; owned by adria on host)
 ├── scripts/
 │   ├── find_route_candidates.py         # host: parse OSM map → route JSON
 │   ├── apply_route_candidates.sh        # host wrapper (needs sudo docker exec)
@@ -147,6 +148,7 @@ sudo docker run --rm -d \
   -v "$HOME/summer26/data/maps:/home/aw/maps:ro" \
   -v "$HOME/summer26/data/autoware_data:/home/aw/autoware_data" \
   -v "$HOME/summer26/data/autoware_data/ndt_scan_matcher.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" \
+  -v "$HOME/summer26/data/bags:/home/aw/bags" \
   --entrypoint /bin/bash \
   ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
   -lc '

@@ -31,6 +31,10 @@ data/maps/**/*.float_backup*
 data/autoware_data/diag/
 data/autoware_data/loc_src/
 
+# Experiment rosbags (large; keep under ~/summer26/data/bags/)
+data/bags/*
+!data/bags/.gitkeep
+
 /logs/
 
 # Python

@@ -34,6 +34,7 @@ Add these mounts to the canonical `docker run` (in addition to existing map / au
 ```bash
 -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
 -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
+-v "$HOME/summer26/data/bags:/home/aw/bags" \
 ```
 
 Full example (stop old container first):
@@ -50,6 +51,7 @@ sudo docker run --rm -d \
   -v "$HOME/summer26/data/autoware_data/ndt_scan_matcher.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" \
   -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
   -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
+  -v "$HOME/summer26/data/bags:/home/aw/bags" \
   --entrypoint /bin/bash \
   ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
   -lc '
@@ -172,6 +174,8 @@ bash /home/aw/autoware_data/diagnose_stuck.sh
 ```
 
 Stop the node (Ctrl+C) and confirm behavior returns toward baseline when objects disappear.
+
+**A/B rosbag experiments:** [`notes/ROSBAG_AB_TESTING.md`](ROSBAG_AB_TESTING.md) — bags go to `~/summer26/data/bags/` (not under `autoware_data`).
 
 ---
 
