@@ -256,7 +256,43 @@ bash ~/summer26/scripts/write_bag_metadata.sh run_c_attack_001 attack
 
 See `scripts/record_experiment_bag.sh` — perception chain, planning outputs, ego state, `/clock`.
 
+---
+
+## Compare two bags (baseline vs dsgn ON)
+
+After recording both runs:
+
+```bash
+# host
+bash ~/summer26/scripts/compare_experiment_bags.sh run_a_baseline_001 run_b_dsgn_offline_001
+```
+
+Prints a table: speed, distance, object counts, obstacle-stop events, etc.
+
+---
+
+## Who receives `/perception/object_recognition/objects`?
+
+**Rosbags do not contain subscriber info** — only messages. To see who subscribes, query the **live** graph while Autoware is running (inside Docker):
+
+```bash
+bash /home/aw/scripts/audit_object_topic_subscribers.sh
+```
+
+Or manually:
+
+```bash
+ros2 topic info -v /perception/object_recognition/objects
+```
+
+Main consumers: `map_based_prediction` (upstream), then `behavior_path_planner`, `behavior_velocity_planner`, `motion_velocity_planner` (obstacle_stop), `autonomous_emergency_braking`. See `notes/PERCEPTION_PIPELINE.md` §5.3.
+
+---
+
 ## Related
 
+- [`scripts/compare_experiment_bags.sh`](../scripts/compare_experiment_bags.sh) — diff baseline vs dsgn-on bags
+- [`scripts/audit_object_topic_subscribers.sh`](../scripts/audit_object_topic_subscribers.sh) — live subscriber graph
 - [`DSGN_OFFLINE_RUNBOOK.md`](DSGN_OFFLINE_RUNBOOK.md) — build/run `dsgn_offline`
 - [`scripts/drive_route_and_engage.sh`](../scripts/drive_route_and_engage.sh) — fixed start/goal from JSON
+- [`PERCEPTION_PIPELINE.md`](PERCEPTION_PIPELINE.md) — full perception → planning chain
