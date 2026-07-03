@@ -1,0 +1,540 @@
+diff --git a/dsgn/csrc/BuildCostVolume.h b/dsgn/csrc/BuildCostVolume.h
+index 356e890..e6212b5 100755
+--- a/dsgn/csrc/BuildCostVolume.h
++++ b/dsgn/csrc/BuildCostVolume.h
+@@ -10,7 +10,7 @@
+ at::Tensor BuildCostVolume_forward(const at::Tensor& left,
+                             const at::Tensor& right,
+                             const at::Tensor& shift) {
+-  if (left.type().is_cuda()) {
++  if (left.is_cuda()) {
+ #ifdef WITH_CUDA
+     return BuildCostVolume_forward_cuda(left, right, shift);
+ #else
+@@ -22,7 +22,7 @@ at::Tensor BuildCostVolume_forward(const at::Tensor& left,
+ 
+ std::tuple<at::Tensor, at::Tensor> BuildCostVolume_backward(const at::Tensor& grad,
+                              const at::Tensor& shift) {
+-  if (grad.type().is_cuda()) {
++  if (grad.is_cuda()) {
+ #ifdef WITH_CUDA
+     return BuildCostVolume_backward_cuda(grad, shift);
+ #else
+diff --git a/dsgn/csrc/ROIAlign.h b/dsgn/csrc/ROIAlign.h
+index 3907dea..2b049f0 100755
+--- a/dsgn/csrc/ROIAlign.h
++++ b/dsgn/csrc/ROIAlign.h
+@@ -14,7 +14,7 @@ at::Tensor ROIAlign_forward(const at::Tensor& input,
+                             const int pooled_height,
+                             const int pooled_width,
+                             const int sampling_ratio) {
+-  if (input.type().is_cuda()) {
++  if (input.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIAlign_forward_cuda(input, rois, spatial_scale, pooled_height, pooled_width, sampling_ratio);
+ #else
+@@ -34,7 +34,7 @@ at::Tensor ROIAlign_backward(const at::Tensor& grad,
+                              const int height,
+                              const int width,
+                              const int sampling_ratio) {
+-  if (grad.type().is_cuda()) {
++  if (grad.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIAlign_backward_cuda(grad, rois, spatial_scale, pooled_height, pooled_width, batch_size, channels, height, width, sampling_ratio);
+ #else
+diff --git a/dsgn/csrc/ROIPool.h b/dsgn/csrc/ROIPool.h
+index 200fd73..13db1a2 100755
+--- a/dsgn/csrc/ROIPool.h
++++ b/dsgn/csrc/ROIPool.h
+@@ -13,7 +13,7 @@ std::tuple<at::Tensor, at::Tensor> ROIPool_forward(const at::Tensor& input,
+                                 const float spatial_scale,
+                                 const int pooled_height,
+                                 const int pooled_width) {
+-  if (input.type().is_cuda()) {
++  if (input.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIPool_forward_cuda(input, rois, spatial_scale, pooled_height, pooled_width);
+ #else
+@@ -34,7 +34,7 @@ at::Tensor ROIPool_backward(const at::Tensor& grad,
+                                  const int channels,
+                                  const int height,
+                                  const int width) {
+-  if (grad.type().is_cuda()) {
++  if (grad.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIPool_backward_cuda(grad, input, rois, argmax, spatial_scale, pooled_height, pooled_width, batch_size, channels, height, width);
+ #else
+diff --git a/dsgn/csrc/SigmoidFocalLoss.h b/dsgn/csrc/SigmoidFocalLoss.h
+index 308861e..dc1a3e6 100755
+--- a/dsgn/csrc/SigmoidFocalLoss.h
++++ b/dsgn/csrc/SigmoidFocalLoss.h
+@@ -13,7 +13,7 @@ at::Tensor SigmoidFocalLoss_forward(
+ 		const int num_classes, 
+ 		const float gamma, 
+ 		const float alpha) {
+-  if (logits.type().is_cuda()) {
++  if (logits.is_cuda()) {
+ #ifdef WITH_CUDA
+     return SigmoidFocalLoss_forward_cuda(logits, targets, num_classes, gamma, alpha);
+ #else
+@@ -30,7 +30,7 @@ at::Tensor SigmoidFocalLoss_backward(
+ 			     const int num_classes,
+ 			     const float gamma,
+ 			     const float alpha) {
+-  if (logits.type().is_cuda()) {
++  if (logits.is_cuda()) {
+ #ifdef WITH_CUDA
+     return SigmoidFocalLoss_backward_cuda(logits, targets, d_losses, num_classes, gamma, alpha);
+ #else
+diff --git a/dsgn/csrc/cpu/ROIAlign_cpu.cpp b/dsgn/csrc/cpu/ROIAlign_cpu.cpp
+index d35aedf..38f85fc 100755
+--- a/dsgn/csrc/cpu/ROIAlign_cpu.cpp
++++ b/dsgn/csrc/cpu/ROIAlign_cpu.cpp
+@@ -224,8 +224,8 @@ at::Tensor ROIAlign_forward_cpu(const at::Tensor& input,
+                                 const int pooled_height,
+                                 const int pooled_width,
+                                 const int sampling_ratio) {
+-  AT_ASSERTM(!input.type().is_cuda(), "input must be a CPU tensor");
+-  AT_ASSERTM(!rois.type().is_cuda(), "rois must be a CPU tensor");
++  TORCH_CHECK(!input.is_cuda(), "input must be a CPU tensor");
++  TORCH_CHECK(!rois.is_cuda(), "rois must be a CPU tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto channels = input.size(1);
+@@ -239,10 +239,10 @@ at::Tensor ROIAlign_forward_cpu(const at::Tensor& input,
+     return output;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(input.type(), "ROIAlign_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "ROIAlign_forward", [&] {
+     ROIAlignForward_cpu_kernel<scalar_t>(
+          output_size,
+-         input.data<scalar_t>(),
++         input.data_ptr<scalar_t>(),
+          spatial_scale,
+          channels,
+          height,
+@@ -250,8 +250,8 @@ at::Tensor ROIAlign_forward_cpu(const at::Tensor& input,
+          pooled_height,
+          pooled_width,
+          sampling_ratio,
+-         rois.data<scalar_t>(),
+-         output.data<scalar_t>());
++         rois.data_ptr<scalar_t>(),
++         output.data_ptr<scalar_t>());
+   });
+   return output;
+ }
+diff --git a/dsgn/csrc/cpu/nms_cpu.cpp b/dsgn/csrc/cpu/nms_cpu.cpp
+index 1153dea..29e43f3 100755
+--- a/dsgn/csrc/cpu/nms_cpu.cpp
++++ b/dsgn/csrc/cpu/nms_cpu.cpp
+@@ -6,9 +6,9 @@ template <typename scalar_t>
+ at::Tensor nms_cpu_kernel(const at::Tensor& dets,
+                           const at::Tensor& scores,
+                           const float threshold) {
+-  AT_ASSERTM(!dets.type().is_cuda(), "dets must be a CPU tensor");
+-  AT_ASSERTM(!scores.type().is_cuda(), "scores must be a CPU tensor");
+-  AT_ASSERTM(dets.type() == scores.type(), "dets should have the same type as scores");
++  TORCH_CHECK(!dets.is_cuda(), "dets must be a CPU tensor");
++  TORCH_CHECK(!scores.is_cuda(), "scores must be a CPU tensor");
++  TORCH_CHECK(dets.scalar_type() == scores.scalar_type(), "dets should have the same type as scores");
+ 
+   if (dets.numel() == 0) {
+     return at::empty({0}, dets.options().dtype(at::kLong).device(at::kCPU));
+@@ -26,13 +26,13 @@ at::Tensor nms_cpu_kernel(const at::Tensor& dets,
+   auto ndets = dets.size(0);
+   at::Tensor suppressed_t = at::zeros({ndets}, dets.options().dtype(at::kByte).device(at::kCPU));
+ 
+-  auto suppressed = suppressed_t.data<uint8_t>();
+-  auto order = order_t.data<int64_t>();
+-  auto x1 = x1_t.data<scalar_t>();
+-  auto y1 = y1_t.data<scalar_t>();
+-  auto x2 = x2_t.data<scalar_t>();
+-  auto y2 = y2_t.data<scalar_t>();
+-  auto areas = areas_t.data<scalar_t>();
++  auto suppressed = suppressed_t.data_ptr<uint8_t>();
++  auto order = order_t.data_ptr<int64_t>();
++  auto x1 = x1_t.data_ptr<scalar_t>();
++  auto y1 = y1_t.data_ptr<scalar_t>();
++  auto x2 = x2_t.data_ptr<scalar_t>();
++  auto y2 = y2_t.data_ptr<scalar_t>();
++  auto areas = areas_t.data_ptr<scalar_t>();
+ 
+   for (int64_t _i = 0; _i < ndets; _i++) {
+     auto i = order[_i];
+@@ -68,7 +68,7 @@ at::Tensor nms_cpu(const at::Tensor& dets,
+                const at::Tensor& scores,
+                const float threshold) {
+   at::Tensor result;
+-  AT_DISPATCH_FLOATING_TYPES(dets.type(), "nms", [&] {
++  AT_DISPATCH_FLOATING_TYPES(dets.scalar_type(), "nms", [&] {
+     result = nms_cpu_kernel<scalar_t>(dets, scores, threshold);
+   });
+   return result;
+diff --git a/dsgn/csrc/cuda/BuildCostVolume_cuda.cu b/dsgn/csrc/cuda/BuildCostVolume_cuda.cu
+index ead118a..0c8cfdf 100755
+--- a/dsgn/csrc/cuda/BuildCostVolume_cuda.cu
++++ b/dsgn/csrc/cuda/BuildCostVolume_cuda.cu
+@@ -198,14 +198,14 @@ __global__ void BuildCostVolumeBackwardFeature(const int nthreads,
+ at::Tensor BuildCostVolume_forward_cuda(const at::Tensor& left,
+                                  const at::Tensor& right,
+                                  const at::Tensor& shift) {
+-  AT_ASSERTM(left.type().is_cuda(), "left must be a CUDA tensor");
+-  AT_ASSERTM(right.type().is_cuda(), "right must be a CUDA tensor");
+-  AT_ASSERTM(shift.type().is_cuda(), "shift must be a CUDA tensor");
++  TORCH_CHECK(left.is_cuda(), "left must be a CUDA tensor");
++  TORCH_CHECK(right.is_cuda(), "right must be a CUDA tensor");
++  TORCH_CHECK(shift.is_cuda(), "shift must be a CUDA tensor");
+ 
+-  AT_ASSERTM((left.size(0) == right.size(0)) && (left.size(1) == right.size(1)) && \
++  TORCH_CHECK((left.size(0) == right.size(0)) && (left.size(1) == right.size(1)) && \
+     (left.size(2) == right.size(2)) && (left.size(3) == right.size(3)), \
+     "Left image and right image should match their size.");
+-  AT_ASSERTM(left.size(0) == shift.size(0), \
++  TORCH_CHECK(left.size(0) == shift.size(0), \
+     "Image and shift should of same batch.");
+ 
+   auto num_batch = left.size(0);
+@@ -231,18 +231,18 @@ at::Tensor BuildCostVolume_forward_cuda(const at::Tensor& left,
+     return output;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(left.type(), "BuildCostVolume_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(left.scalar_type(), "BuildCostVolume_forward", [&] {
+     BuildCostVolumeForward<scalar_t><<<grid, block, 0, stream>>>(
+          output_size / 2,
+-         left.contiguous().data<scalar_t>(),
+-         right.contiguous().data<scalar_t>(),
+-         shift.contiguous().data<scalar_t>(),
++         left.contiguous().data_ptr<scalar_t>(),
++         right.contiguous().data_ptr<scalar_t>(),
++         shift.contiguous().data_ptr<scalar_t>(),
+          num_batch,
+          channels,
+          height,
+          width,
+          max_disp,
+-         output.data<scalar_t>());
++         output.data_ptr<scalar_t>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err2 = cudaGetLastError();
+@@ -255,7 +255,7 @@ at::Tensor BuildCostVolume_forward_cuda(const at::Tensor& left,
+ // TODO remove the dependency on input and use instead its sizes -> save memory
+ std::tuple<at::Tensor, at::Tensor> BuildCostVolume_backward_cuda(const at::Tensor& grad,
+                                   const at::Tensor& shift) {
+-  AT_ASSERTM(shift.type().is_cuda(), "shift must be a CUDA tensor");
++  TORCH_CHECK(shift.is_cuda(), "shift must be a CUDA tensor");
+ 
+   auto num_batch = grad.size(0);
+   auto channels = grad.size(1) / 2;
+@@ -266,7 +266,7 @@ std::tuple<at::Tensor, at::Tensor> BuildCostVolume_backward_cuda(const at::Tenso
+   auto grad_left = at::zeros({num_batch, channels, height, width}, grad.options());
+   auto grad_right = at::zeros({num_batch, channels, height, width}, grad.options());
+ 
+-  AT_ASSERTM(grad.numel() == num_batch * channels * 2 * max_disp * height * width,
++  TORCH_CHECK(grad.numel() == num_batch * channels * 2 * max_disp * height * width,
+       "grad shape is wrong");
+ 
+   cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+@@ -285,18 +285,18 @@ std::tuple<at::Tensor, at::Tensor> BuildCostVolume_backward_cuda(const at::Tenso
+     return std::make_tuple(grad_left, grad_right);
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(grad.type(), "BuildCostVolume_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(grad.scalar_type(), "BuildCostVolume_backward", [&] {
+     BuildCostVolumeBackwardFeature<scalar_t><<<grid, block, 0, stream>>>(
+          grad.numel() / 2,
+-         grad.contiguous().data<scalar_t>(),
+-         shift.contiguous().data<scalar_t>(),
++         grad.contiguous().data_ptr<scalar_t>(),
++         shift.contiguous().data_ptr<scalar_t>(),
+          num_batch,
+          channels,
+          height,
+          width,
+          max_disp,
+-         grad_left.data<scalar_t>(),
+-         grad_right.data<scalar_t>());
++         grad_left.data_ptr<scalar_t>(),
++         grad_right.data_ptr<scalar_t>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err4 = cudaGetLastError();
+diff --git a/dsgn/csrc/cuda/ROIAlign_cuda.cu b/dsgn/csrc/cuda/ROIAlign_cuda.cu
+index eb9fc13..06c9dee 100755
+--- a/dsgn/csrc/cuda/ROIAlign_cuda.cu
++++ b/dsgn/csrc/cuda/ROIAlign_cuda.cu
+@@ -260,8 +260,8 @@ at::Tensor ROIAlign_forward_cuda(const at::Tensor& input,
+                                  const int pooled_height,
+                                  const int pooled_width,
+                                  const int sampling_ratio) {
+-  AT_ASSERTM(input.type().is_cuda(), "input must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  TORCH_CHECK(input.is_cuda(), "input must be a CUDA tensor");
++  TORCH_CHECK(rois.is_cuda(), "rois must be a CUDA tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto channels = input.size(1);
+@@ -285,10 +285,10 @@ at::Tensor ROIAlign_forward_cuda(const at::Tensor& input,
+     return output;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(input.type(), "ROIAlign_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "ROIAlign_forward", [&] {
+     RoIAlignForward<scalar_t><<<grid, block, 0, stream>>>(
+          output_size,
+-         input.contiguous().data<scalar_t>(),
++         input.contiguous().data_ptr<scalar_t>(),
+          spatial_scale,
+          channels,
+          height,
+@@ -296,8 +296,8 @@ at::Tensor ROIAlign_forward_cuda(const at::Tensor& input,
+          pooled_height,
+          pooled_width,
+          sampling_ratio,
+-         rois.contiguous().data<scalar_t>(),
+-         output.data<scalar_t>());
++         rois.contiguous().data_ptr<scalar_t>(),
++         output.data_ptr<scalar_t>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err2 = cudaGetLastError();
+@@ -318,8 +318,8 @@ at::Tensor ROIAlign_backward_cuda(const at::Tensor& grad,
+                                   const int height,
+                                   const int width,
+                                   const int sampling_ratio) {
+-  AT_ASSERTM(grad.type().is_cuda(), "grad must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  TORCH_CHECK(grad.is_cuda(), "grad must be a CUDA tensor");
++  TORCH_CHECK(rois.is_cuda(), "rois must be a CUDA tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto grad_input = at::zeros({batch_size, channels, height, width}, grad.options());
+@@ -340,10 +340,10 @@ at::Tensor ROIAlign_backward_cuda(const at::Tensor& grad,
+     return grad_input;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(grad.type(), "ROIAlign_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(grad.scalar_type(), "ROIAlign_backward", [&] {
+     RoIAlignBackwardFeature<scalar_t><<<grid, block, 0, stream>>>(
+          grad.numel(),
+-         grad.contiguous().data<scalar_t>(),
++         grad.contiguous().data_ptr<scalar_t>(),
+          num_rois,
+          spatial_scale,
+          channels,
+@@ -352,8 +352,8 @@ at::Tensor ROIAlign_backward_cuda(const at::Tensor& grad,
+          pooled_height,
+          pooled_width,
+          sampling_ratio,
+-         grad_input.data<scalar_t>(),
+-         rois.contiguous().data<scalar_t>());
++         grad_input.data_ptr<scalar_t>(),
++         rois.contiguous().data_ptr<scalar_t>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err4 = cudaGetLastError();
+diff --git a/dsgn/csrc/cuda/ROIPool_cuda.cu b/dsgn/csrc/cuda/ROIPool_cuda.cu
+index e306546..17c7475 100755
+--- a/dsgn/csrc/cuda/ROIPool_cuda.cu
++++ b/dsgn/csrc/cuda/ROIPool_cuda.cu
+@@ -112,8 +112,8 @@ std::tuple<at::Tensor, at::Tensor> ROIPool_forward_cuda(const at::Tensor& input,
+                                 const float spatial_scale,
+                                 const int pooled_height,
+                                 const int pooled_width) {
+-  AT_ASSERTM(input.type().is_cuda(), "input must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  TORCH_CHECK(input.is_cuda(), "input must be a CUDA tensor");
++  TORCH_CHECK(rois.is_cuda(), "rois must be a CUDA tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto channels = input.size(1);
+@@ -140,19 +140,19 @@ std::tuple<at::Tensor, at::Tensor> ROIPool_forward_cuda(const at::Tensor& input,
+     return std::make_tuple(output, argmax);
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(input.type(), "ROIPool_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "ROIPool_forward", [&] {
+     RoIPoolFForward<scalar_t><<<grid, block, 0, stream>>>(
+          output_size,
+-         input.contiguous().data<scalar_t>(),
++         input.contiguous().data_ptr<scalar_t>(),
+          spatial_scale,
+          channels,
+          height,
+          width,
+          pooled_height,
+          pooled_width,
+-         rois.contiguous().data<scalar_t>(),
+-         output.data<scalar_t>(),
+-         argmax.data<int>());
++         rois.contiguous().data_ptr<scalar_t>(),
++         output.data_ptr<scalar_t>(),
++         argmax.data_ptr<int>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err4 = cudaGetLastError();
+@@ -174,8 +174,8 @@ at::Tensor ROIPool_backward_cuda(const at::Tensor& grad,
+                                  const int channels,
+                                  const int height,
+                                  const int width) {
+-  AT_ASSERTM(grad.type().is_cuda(), "grad must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  TORCH_CHECK(grad.is_cuda(), "grad must be a CUDA tensor");
++  TORCH_CHECK(rois.is_cuda(), "rois must be a CUDA tensor");
+   // TODO add more checks
+ 
+   auto num_rois = rois.size(0);
+@@ -197,11 +197,11 @@ at::Tensor ROIPool_backward_cuda(const at::Tensor& grad,
+     return grad_input;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(grad.type(), "ROIPool_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(grad.scalar_type(), "ROIPool_backward", [&] {
+     RoIPoolFBackward<scalar_t><<<grid, block, 0, stream>>>(
+          grad.numel(),
+-         grad.contiguous().data<scalar_t>(),
+-         argmax.data<int>(),
++         grad.contiguous().data_ptr<scalar_t>(),
++         argmax.data_ptr<int>(),
+          num_rois,
+          spatial_scale,
+          channels,
+@@ -209,8 +209,8 @@ at::Tensor ROIPool_backward_cuda(const at::Tensor& grad,
+          width,
+          pooled_height,
+          pooled_width,
+-         grad_input.data<scalar_t>(),
+-         rois.contiguous().data<scalar_t>());
++         grad_input.data_ptr<scalar_t>(),
++         rois.contiguous().data_ptr<scalar_t>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err3 = cudaGetLastError();
+diff --git a/dsgn/csrc/cuda/SigmoidFocalLoss_cuda.cu b/dsgn/csrc/cuda/SigmoidFocalLoss_cuda.cu
+index d837552..fccf59b 100755
+--- a/dsgn/csrc/cuda/SigmoidFocalLoss_cuda.cu
++++ b/dsgn/csrc/cuda/SigmoidFocalLoss_cuda.cu
+@@ -107,9 +107,9 @@ at::Tensor SigmoidFocalLoss_forward_cuda(
+ 		const int num_classes, 
+ 		const float gamma, 
+ 		const float alpha) {
+-  AT_ASSERTM(logits.type().is_cuda(), "logits must be a CUDA tensor");
+-  AT_ASSERTM(targets.type().is_cuda(), "targets must be a CUDA tensor");
+-  AT_ASSERTM(logits.dim() == 2, "logits should be NxClass");
++  TORCH_CHECK(logits.is_cuda(), "logits must be a CUDA tensor");
++  TORCH_CHECK(targets.is_cuda(), "targets must be a CUDA tensor");
++  TORCH_CHECK(logits.dim() == 2, "logits should be NxClass");
+ 
+   const int num_samples = logits.size(0);
+ 	
+@@ -130,16 +130,16 @@ at::Tensor SigmoidFocalLoss_forward_cuda(
+     return losses;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(logits.type(), "SigmoidFocalLoss_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "SigmoidFocalLoss_forward", [&] {
+     SigmoidFocalLossForward<scalar_t><<<grid, block, 0, stream>>>(
+          losses_size,
+-         logits.contiguous().data<scalar_t>(),
+-	 targets.contiguous().data<int>(),
++         logits.contiguous().data_ptr<scalar_t>(),
++	 targets.contiguous().data_ptr<int>(),
+          num_classes,
+ 	 gamma,
+ 	 alpha,
+ 	 num_samples,
+-         losses.data<scalar_t>());
++         losses.data_ptr<scalar_t>());
+   });
+   //THCudaCheck(cudaGetLastError());
+   cudaError_t err2 = cudaGetLastError();
+@@ -157,14 +157,14 @@ at::Tensor SigmoidFocalLoss_backward_cuda(
+ 		const int num_classes, 
+ 		const float gamma, 
+ 		const float alpha) {
+-  AT_ASSERTM(logits.type().is_cuda(), "logits must be a CUDA tensor");
+-  AT_ASSERTM(targets.type().is_cuda(), "targets must be a CUDA tensor");
+-  AT_ASSERTM(d_losses.type().is_cuda(), "d_losses must be a CUDA tensor");
++  TORCH_CHECK(logits.is_cuda(), "logits must be a CUDA tensor");
++  TORCH_CHECK(targets.is_cuda(), "targets must be a CUDA tensor");
++  TORCH_CHECK(d_losses.is_cuda(), "d_losses must be a CUDA tensor");
+ 
+-  AT_ASSERTM(logits.dim() == 2, "logits should be NxClass");
++  TORCH_CHECK(logits.dim() == 2, "logits should be NxClass");
+ 
+   const int num_samples = logits.size(0);
+-  AT_ASSERTM(logits.size(1) == num_classes, "logits.size(1) should be num_classes");
++  TORCH_CHECK(logits.size(1) == num_classes, "logits.size(1) should be num_classes");
+ 	
+   auto d_logits = at::zeros({num_samples, num_classes}, logits.options());
+   auto d_logits_size = num_samples * logits.size(1);
+@@ -183,17 +183,17 @@ at::Tensor SigmoidFocalLoss_backward_cuda(
+     return d_logits;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(logits.type(), "SigmoidFocalLoss_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "SigmoidFocalLoss_backward", [&] {
+     SigmoidFocalLossBackward<scalar_t><<<grid, block, 0, stream>>>(
+          d_logits_size,
+-         logits.contiguous().data<scalar_t>(),
+-	 targets.contiguous().data<int>(),
+-	 d_losses.contiguous().data<scalar_t>(),
++         logits.contiguous().data_ptr<scalar_t>(),
++	 targets.contiguous().data_ptr<int>(),
++	 d_losses.contiguous().data_ptr<scalar_t>(),
+          num_classes,
+ 	 gamma,
+ 	 alpha,
+ 	 num_samples,
+-         d_logits.data<scalar_t>());
++         d_logits.data_ptr<scalar_t>());
+   });
+ 
+   //THCudaCheck(cudaGetLastError());
+diff --git a/dsgn/csrc/cuda/nms.cu b/dsgn/csrc/cuda/nms.cu
+index 1b88126..c0d7742 100755
+--- a/dsgn/csrc/cuda/nms.cu
++++ b/dsgn/csrc/cuda/nms.cu
+@@ -70,7 +70,7 @@ __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
+ // boxes is a N x 5 tensor
+ at::Tensor nms_cuda(const at::Tensor boxes, float nms_overlap_thresh) {
+   using scalar_t = float;
+-  AT_ASSERTM(boxes.type().is_cuda(), "boxes must be a CUDA tensor");
++  TORCH_CHECK(boxes.is_cuda(), "boxes must be a CUDA tensor");
+   auto scores = boxes.select(1, 4);
+   auto order_t = std::get<1>(scores.sort(0, /* descending=*/true));
+   auto boxes_sorted = boxes.index_select(0, order_t);
+@@ -80,7 +80,7 @@ at::Tensor nms_cuda(const at::Tensor boxes, float nms_overlap_thresh) {
+   //const int col_blocks = THCCeilDiv(boxes_num, threadsPerBlock);
+   const int col_blocks = (boxes_num + threadsPerBlock - 1) / threadsPerBlock;
+ 
+-  scalar_t* boxes_dev = boxes_sorted.data<scalar_t>();
++  scalar_t* boxes_dev = boxes_sorted.data_ptr<scalar_t>();
+ 
+   //THCState *state = at::globalContext().lazyInitCUDA(); // TODO replace with getTHCState //Arka
+ 
+@@ -121,7 +121,7 @@ if (err != cudaSuccess) {
+   memset(&remv[0], 0, sizeof(unsigned long long) * col_blocks);
+ 
+   at::Tensor keep = at::empty({boxes_num}, boxes.options().dtype(at::kLong).device(at::kCPU));
+-  int64_t* keep_out = keep.data<int64_t>();
++  int64_t* keep_out = keep.data_ptr<int64_t>();
+ 
+   int num_to_keep = 0;
+   for (int i = 0; i < boxes_num; i++) {
+diff --git a/dsgn/csrc/nms.h b/dsgn/csrc/nms.h
+index 312fed4..0cf71db 100755
+--- a/dsgn/csrc/nms.h
++++ b/dsgn/csrc/nms.h
+@@ -11,7 +11,7 @@ at::Tensor nms(const at::Tensor& dets,
+                const at::Tensor& scores,
+                const float threshold) {
+ 
+-  if (dets.type().is_cuda()) {
++  if (dets.is_cuda()) {
+ #ifdef WITH_CUDA
+     // TODO raise error if not compiled with CUDA
+     if (dets.numel() == 0)
