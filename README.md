@@ -106,10 +106,19 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 
 | Path | Role | Where to commit changes |
 |------|------|-------------------------|
-| `external/DSGN_custom/` | Train/run DSGN; write detection `.txt` files | Your fork of [DSGN_custom](https://github.com/DF-Autoware-AWSIM/DSGN_custom) |
+| `external/DSGN_custom/` | Train/run DSGN; write detection `.txt` files | Your fork: [adricalm/DSGN_custom](https://github.com/adricalm/DSGN_custom) (`upstream` = Arka’s repo) |
 | `src/dsgn_offline/` | Publish offline detections into Autoware (`/perception/object_recognition/detection/objects`) | Your fork: [adricalm/dsgn_offline](https://github.com/adricalm/dsgn_offline) (`upstream` = Arka’s repo) |
 
 **Why:** keeps Autoware integration (`summer26`) separate from ML/ROS code you will modify; avoids accidental commits of large datasets or model weights; preserves a clear diff against the prior baseline via `upstream`.
+
+**Remotes (both nested repos):** `origin` = your fork (push here); `upstream` = [DF-Autoware-AWSIM](https://github.com/DF-Autoware-AWSIM) (pull Arka’s updates). If you cloned Arka’s repo directly, repoint before your first commit:
+
+```bash
+cd external/DSGN_custom   # or src/dsgn_offline
+git remote rename origin upstream
+git remote add origin git@github.com:adricalm/<repo>.git
+git push -u origin master   # dsgn_offline uses main
+```
 
 **Workflow:** edit inside the nested repo → `git commit` / `git push` there. Only commit integration docs, scripts, and small configs in `summer26`. Clone the forks locally after a fresh checkout (they are not bundled in this repo).
 

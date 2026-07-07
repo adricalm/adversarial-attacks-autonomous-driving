@@ -42,7 +42,7 @@ ln -sfn "${ROOT}/data/arka/awsim/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
 ln -sfn "${ROOT}/data/arka/awsim/test.txt" "${DSGN}/data/awsim/test.txt"
 ln -sfn "${ROOT}/data/arka/awsim/testing" "${DSGN}/data/awsim/testing"
 
-cd "${DSGN}/tools"
+cd "${DSGN}/tools"  
 python test_no_eval.py \
   --cfg "${CFG}" \
   --data_path "${DATA_PATH}" \
