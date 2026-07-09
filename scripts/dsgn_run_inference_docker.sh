@@ -14,10 +14,13 @@ ROOT="${HOME}/summer26"
 DSGN="${ROOT}/external/DSGN_custom"
 IMAGE="${DSGN_DOCKER_IMAGE:-dsgn-pt13:cuda10.1}"
 PATCH_FILE="${ROOT}/scripts/patches/dsgn_csrc_pt26.patch"
+ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
+ADRIA_DS="${ROOT}/dsgn/datasets/adria/dsgn_awsim"
 
-DATA_PATH="${DATA_PATH:-${ROOT}/data/arka/awsim/testing_offline_patched}"
-SPLIT_FILE="${SPLIT_FILE:-${ROOT}/data/arka/awsim/test_offline.txt}"
-LOADMODEL="${LOADMODEL:-${ROOT}/models/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar}"
+DATA_PATH="${DATA_PATH:-${ADRIA_DS}/testing_offline_patched}"
+SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline.txt}"
+LOADMODEL="${LOADMODEL:-${ROOT}/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar}"
+DETECTIONS_DIR="${DETECTIONS_DIR:-${ROOT}/dsgn/detections/adria}"
 TAG="${TAG:-_patched_100_135_pt13_docker}"
 USE_GPU="${USE_GPU:-1}"
 
@@ -59,6 +62,13 @@ sudo docker run --rm "${GPU_FLAG[@]}" \
     --devices 0 \
     --tag "${TAG}"
 
-OUT_DIR="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}"
+RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}"
+OUT_DIR="${DETECTIONS_DIR}/${TAG#_}"
+if [[ -d "${RAW_OUT}" ]]; then
+  mkdir -p "${DETECTIONS_DIR}"
+  rm -rf "${OUT_DIR}"
+  mv "${RAW_OUT}" "${OUT_DIR}"
+fi
+
 echo ""
 echo "Detections written to: ${OUT_DIR}"

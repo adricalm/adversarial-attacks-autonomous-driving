@@ -80,8 +80,13 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 │   └── awsim/
 │       ├── awsim_labs_v1.6.1.zip
 │       └── extracted/                   # AWSIM binary
-│   └── arka/                            # AWSIM dataset from prior intern (gitignored)
 │   └── bags/                            # experiment rosbags (gitignored; owned by adria on host)
+├── dsgn/                                # DSGN pipeline — datasets, checkpoints, detections (gitignored bulk)
+│   ├── datasets/arka/dsgn_awsim/        # Arka reference KITTI-layout stereo data
+│   ├── datasets/adria/dsgn_awsim/       # adria patches and derived datasets
+│   ├── checkpoints/                   # .tar weights only (arka / kitti / adria)
+│   ├── detections/                    # per-frame KITTI .txt inference outputs
+│   └── training_logs/
 ├── scripts/
 │   ├── find_route_candidates.py         # host: parse OSM map → route JSON
 │   ├── apply_route_candidates.sh        # host wrapper (needs sudo docker exec)
@@ -93,7 +98,6 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 ├── logs/                                # script output logs (gitignored)
 ├── notes/
 │   └── DEBUG_LOG.md                     # pitfalls, diagnostics chain, changelog
-├── models/                              # ML configs / experiment notes (weights gitignored)
 └── src/
     └── dsgn_offline/                    # ROS 2 offline perception bridge — separate git repo (gitignored)
 ```
@@ -121,6 +125,10 @@ git push -u origin master   # dsgn_offline uses main
 ```
 
 **Workflow:** edit inside the nested repo → `git commit` / `git push` there. Only commit integration docs, scripts, and small configs in `summer26`. Clone the forks locally after a fresh checkout (they are not bundled in this repo).
+
+**`dsgn/datasets/arka/dsgn_awsim` note:** Arka's reference KITTI-layout dataset — read-only baseline for training and inference. Adria's derived data (patches, patched images) lives under `dsgn/datasets/adria/dsgn_awsim/`.
+
+**DSGN inference on this host (L40S):** Arka's checkpoint was trained with PyTorch 1.3. Faithful re-inference is **not possible here** — PT 1.3 needs an older GPU (CUDA 10.1; no L40S/Ada support) and DSGN's CUDA ops cannot run CPU-only. PT 2.6 (`external/DSGN_custom/.venv`, `scripts/dsgn_run_inference.sh`) runs on the L40S but produces **wrong detections** vs Arka's baseline. Host PT 1.3/1.10 scripts are **archived** under `scripts/archive/dsgn_pt_experiments/` (do not use on this machine). For Autoware experiments, replay Arka's precomputed outputs via [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md). Full matrix and validation: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md).
 
 ---
 
@@ -328,7 +336,7 @@ Healthy end state: `state: 5`, `velocity > 0`, MRM `state: 1`, `hazard emergency
 2. Measure whether perception errors affect **driving behavior** (planning, control).
 3. Evaluate **defense / recovery** methods.
 
-See `models/` for experiment configs and the DSGN forks above for perception code.
+See `dsgn/` for datasets, checkpoints, and detection outputs; DSGN forks above for perception code.
 
 ---
 
@@ -339,6 +347,7 @@ See `models/` for experiment configs and the DSGN forks above for perception cod
 - DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately (see layout above)
 - Map: Autoware Nishi-Shinjuku sample (`lanelet2_map.osm` + pointcloud)
 - AWSIM Labs v1.6.1: `data/awsim/`
-- AWSIM training data (prior intern): `data/arka/` (on disk only, not in git)
+- DSGN reference dataset (Arka): `dsgn/datasets/arka/dsgn_awsim/` (on disk only, not in git)
 - Pitfalls, diagnostics chain, changelog: [`notes/DEBUG_LOG.md`](notes/DEBUG_LOG.md)
 - DSGN offline replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md)
+- DSGN PyTorch / GPU constraints: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md)

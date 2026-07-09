@@ -1,6 +1,9 @@
 # Big files
-models/
-data/arka/
+dsgn/datasets/
+dsgn/checkpoints/
+dsgn/detections/
+dsgn/training_logs/
+!dsgn/datasets/adria/.gitkeep
 
 # Runtime output 
 data/autoware_data/*.log

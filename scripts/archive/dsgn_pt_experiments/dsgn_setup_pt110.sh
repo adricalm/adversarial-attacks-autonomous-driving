@@ -2,10 +2,11 @@
 # Experimental: PyTorch 1.10 + CUDA 11.3 on L40S — closer to Arka than PT 2.6.
 # Validates whether an intermediate PT version gives faithful detections on this GPU.
 #
-# Usage: bash ~/summer26/scripts/dsgn_setup_pt110.sh
+# Usage: bash ~/summer26/scripts/archive/dsgn_pt_experiments/dsgn_setup_pt110.sh
 set -eo pipefail
 
 ROOT="${HOME}/summer26"
+ARCHIVE="${ROOT}/scripts/archive/dsgn_pt_experiments"
 DSGN="${ROOT}/external/DSGN_custom"
 CONDA_ROOT="${ROOT}/.conda/miniconda3"
 ENV_NAME="dsgn-pt110"
@@ -61,4 +62,4 @@ bash compile.sh
 
 echo ""
 echo "PT 1.10 env ready: conda activate ${ENV_NAME}"
-echo "Validate: GPU=0 TAG=_pt110_validate_frame10 SPLIT_FILE=${ROOT}/data/arka/awsim/test_offline_frame10.txt bash ${ROOT}/scripts/dsgn_run_inference_pt110.sh"
+echo "Validate: GPU=0 TAG=_pt110_validate_frame10 SPLIT_FILE=${ROOT}/dsgn/datasets/arka/dsgn_awsim/test_offline_frame10.txt bash ${ARCHIVE}/dsgn_run_inference_pt110.sh"

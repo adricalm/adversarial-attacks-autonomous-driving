@@ -6,12 +6,12 @@ instead of cv2.imshow so it works over SSH.
 
 Usage:
   python scripts/visualize_dsgn_detections.py \\
-    --images data/arka/awsim/testing_offline/image_2 \\
-    --calib data/arka/awsim/testing_offline/calib \\
-    --detections models/awsim_pt26/dsgn_12g_awsim/awsim_output_2_finetune_60_val \\
+    --images dsgn/datasets/arka/dsgn_awsim/testing_offline/image_2 \\
+    --calib dsgn/datasets/arka/dsgn_awsim/testing_offline/calib \\
+    --detections dsgn/detections/adria/finetune_60_val \\
     --frames 000010,000099,000105 \\
     --label finetune_60 \\
-    --output data/arka/awsim/detection_previews
+    --output dsgn/datasets/adria/dsgn_awsim/detection_previews
 """
 from __future__ import annotations
 

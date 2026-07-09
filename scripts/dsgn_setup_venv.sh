@@ -2,8 +2,8 @@
 # DSGN inference environment (PyTorch 2.6 + CUDA 12.4).
 #
 # WARNING: This env compiles and runs, but produces WRONG detections on Arka's
-# finetune_60.tar checkpoint (dozens of false cars on clean frames). Use the
-# Arka-compatible env instead: bash ~/summer26/scripts/dsgn_setup_pt13.sh
+# finetune_60.tar checkpoint (dozens of false cars on clean frames). For faithful
+# PT 1.3 inference use Docker on an old GPU — see notes/DSGN_PYTORCH_VERSIONING.md.
 #
 # Usage: bash ~/summer26/scripts/dsgn_setup_venv.sh
 set -euo pipefail
@@ -11,6 +11,7 @@ set -euo pipefail
 ROOT="${HOME}/summer26"
 DSGN="${ROOT}/external/DSGN_custom"
 VENV="${DSGN}/.venv"
+ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
 
 if [[ ! -d "${DSGN}" ]]; then
   echo "error: ${DSGN} not found" >&2
@@ -37,10 +38,10 @@ bash compile.sh
 
 # Calib loader reads data/awsim/training/ (see kitti_dataset.py).
 mkdir -p "${DSGN}/data/awsim"
-ln -sfn "${ROOT}/data/arka/awsim/testing_offline" "${DSGN}/data/awsim/training"
-ln -sfn "${ROOT}/data/arka/awsim/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
-ln -sfn "${ROOT}/data/arka/awsim/test.txt" "${DSGN}/data/awsim/test.txt"
-ln -sfn "${ROOT}/data/arka/awsim/testing" "${DSGN}/data/awsim/testing"
+ln -sfn "${ARKA_DS}/testing_offline" "${DSGN}/data/awsim/training"
+ln -sfn "${ARKA_DS}/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
+ln -sfn "${ARKA_DS}/test.txt" "${DSGN}/data/awsim/test.txt"
+ln -sfn "${ARKA_DS}/testing" "${DSGN}/data/awsim/testing"
 
 echo ""
 echo "DSGN venv ready: ${VENV}"

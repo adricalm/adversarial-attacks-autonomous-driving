@@ -12,15 +12,15 @@ Typical workflow (frame-by-frame)
      python3 scripts/apply_stereo_patches.py preview \\
        --frame 105 --center-x 921 --center-y 420 --size 80 --depth 12.4
 
-   Open data/arka/awsim/patch_previews/000105_compare.png. Tweak coords and re-run;
+   Open dsgn/datasets/adria/dsgn_awsim/patch_previews/000105_compare.png. Tweak coords and re-run;
    the CSV row for that frame is overwritten each time.
 
 2. Repeat for each frame, then build the full dataset once:
 
      python3 scripts/apply_stereo_patches.py apply \\
-       --source data/arka/awsim/testing_offline \\
-       --output data/arka/awsim/testing_offline_patched \\
-       --config data/arka/awsim/patches_100_200.csv \\
+       --source dsgn/datasets/arka/dsgn_awsim/testing_offline \\
+       --output dsgn/datasets/adria/dsgn_awsim/testing_offline_patched \\
+       --config dsgn/datasets/adria/dsgn_awsim/patches_100_200.csv \\
        --frames 100-200
 
 3. Run DSGN inference on --output, then copy awsim_output_* into dsgn_offline/resource/.
@@ -581,7 +581,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     preview_p.add_argument(
         "--source",
-        default="data/arka/awsim/testing_offline",
+        default="dsgn/datasets/arka/dsgn_awsim/testing_offline",
         help="KITTI-layout source dataset",
     )
     preview_p.add_argument("--frame", required=True, help="e.g. 105 or 000105")
@@ -598,7 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     preview_p.add_argument("--seed", type=int, default=None)
     preview_p.add_argument(
         "--config",
-        default="data/arka/awsim/patches_100_200.csv",
+        default="dsgn/datasets/adria/dsgn_awsim/patches_100_200.csv",
         help="patch CSV updated on each preview (default: patches_100_200.csv)",
     )
     preview_p.add_argument(
@@ -608,7 +608,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     preview_p.add_argument(
         "--output",
-        default="data/arka/awsim/patch_previews",
+        default="dsgn/datasets/adria/dsgn_awsim/patch_previews",
         help="where to write preview PNGs",
     )
     preview_p.add_argument(

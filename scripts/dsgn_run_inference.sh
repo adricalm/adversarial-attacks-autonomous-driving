@@ -2,21 +2,26 @@
 # Run DSGN test_no_eval.py on a KITTI-layout dataset.
 #
 # WARNING: Uses PyTorch 2.6 — produces WRONG detections on Arka checkpoint.
-# Use scripts/dsgn_run_inference_pt13.sh (or Docker) for faithful inference.
+# Faithful PT 1.3 inference is not possible on this L40S host (CUDA ops + sm_89).
+# For correct detections use Docker on an old GPU (dsgn_build_docker.sh) or replay
+# Arka's precomputed outputs (notes/DSGN_OFFLINE_RUNBOOK.md).
 #
 # Usage:
 #   bash scripts/dsgn_run_inference.sh
-#   DATA_PATH=~/summer26/data/arka/awsim/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
+#   DATA_PATH=~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
 DSGN="${ROOT}/external/DSGN_custom"
 VENV="${DSGN}/.venv"
+ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
+ADRIA_DS="${ROOT}/dsgn/datasets/adria/dsgn_awsim"
 
-DATA_PATH="${DATA_PATH:-${ROOT}/data/arka/awsim/testing_offline_patched}"
-SPLIT_FILE="${SPLIT_FILE:-${ROOT}/data/arka/awsim/test_offline.txt}"
+DATA_PATH="${DATA_PATH:-${ADRIA_DS}/testing_offline_patched}"
+SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline.txt}"
 CFG="${CFG:-${DSGN}/configs/config_car_12g_awsim.py}"
-LOADMODEL="${LOADMODEL:-${ROOT}/models/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar}"
+LOADMODEL="${LOADMODEL:-${ROOT}/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar}"
+DETECTIONS_DIR="${DETECTIONS_DIR:-${ROOT}/dsgn/detections/adria}"
 TAG="${TAG:-_patched_100_135}"
 GPU="${GPU:-0}"
 BATCH="${BATCH:-1}"
@@ -38,11 +43,11 @@ export PYTHONPATH="${DSGN}/tools:${PYTHONPATH:-}"
 # DSGN loads calib via data/awsim/training/ (hardcoded in kitti_dataset.py).
 mkdir -p "${DSGN}/data/awsim"
 ln -sfn "${DATA_PATH}" "${DSGN}/data/awsim/training"
-ln -sfn "${ROOT}/data/arka/awsim/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
-ln -sfn "${ROOT}/data/arka/awsim/test.txt" "${DSGN}/data/awsim/test.txt"
-ln -sfn "${ROOT}/data/arka/awsim/testing" "${DSGN}/data/awsim/testing"
+ln -sfn "${ARKA_DS}/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
+ln -sfn "${ARKA_DS}/test.txt" "${DSGN}/data/awsim/test.txt"
+ln -sfn "${ARKA_DS}/testing" "${DSGN}/data/awsim/testing"
 
-cd "${DSGN}/tools"  
+cd "${DSGN}/tools"
 python test_no_eval.py \
   --cfg "${CFG}" \
   --data_path "${DATA_PATH}" \
@@ -52,6 +57,14 @@ python test_no_eval.py \
   --devices "${GPU}" \
   --tag "${TAG}"
 
-OUT_DIR="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}"
+# test_no_eval.py writes next to the checkpoint; move to dsgn/detections/adria/.
+RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}"
+OUT_DIR="${DETECTIONS_DIR}/${TAG#_}"
+if [[ -d "${RAW_OUT}" ]]; then
+  mkdir -p "${DETECTIONS_DIR}"
+  rm -rf "${OUT_DIR}"
+  mv "${RAW_OUT}" "${OUT_DIR}"
+fi
+
 echo ""
 echo "Detections written to: ${OUT_DIR}"

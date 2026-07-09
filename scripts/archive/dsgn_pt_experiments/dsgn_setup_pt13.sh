@@ -7,16 +7,18 @@
 # GPU note: PyTorch 1.3 + CUDA 10.1 does not support L40S/Ada GPUs. Default is CPU.
 # For GPU inference you need an older NVIDIA GPU or a remote V100/Titan box.
 #
-# Usage: bash ~/summer26/scripts/dsgn_setup_pt13.sh
+# Usage: bash ~/summer26/scripts/archive/dsgn_pt_experiments/dsgn_setup_pt13.sh
 set -eo pipefail
 
 ROOT="${HOME}/summer26"
 DSGN="${ROOT}/external/DSGN_custom"
 CONDA_ROOT="${ROOT}/.conda/miniconda3"
 ENV_NAME="dsgn-pt13"
+ARCHIVE="${ROOT}/scripts/archive/dsgn_pt_experiments"
+ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
 PATCH_FILE="${ROOT}/scripts/patches/dsgn_csrc_pt26.patch"
-LEGACY_CKPT="${ROOT}/models/arka/dsgn_12g_awsim_remote_downsample/finetune_60_legacy.tar"
-ORIG_CKPT="${ROOT}/models/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar"
+LEGACY_CKPT="${ROOT}/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60_legacy.tar"
+ORIG_CKPT="${ROOT}/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar"
 
 if [[ ! -d "${DSGN}" ]]; then
   echo "error: ${DSGN} not found" >&2
@@ -85,15 +87,15 @@ bash compile.sh
 
 # Calib loader reads data/awsim/training/ (see kitti_dataset.py).
 mkdir -p "${DSGN}/data/awsim"
-ln -sfn "${ROOT}/data/arka/awsim/testing_offline" "${DSGN}/data/awsim/training"
-ln -sfn "${ROOT}/data/arka/awsim/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
-ln -sfn "${ROOT}/data/arka/awsim/test.txt" "${DSGN}/data/awsim/test.txt"
-ln -sfn "${ROOT}/data/arka/awsim/testing" "${DSGN}/data/awsim/testing"
+ln -sfn "${ARKA_DS}/testing_offline" "${DSGN}/data/awsim/training"
+ln -sfn "${ARKA_DS}/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
+ln -sfn "${ARKA_DS}/test.txt" "${DSGN}/data/awsim/test.txt"
+ln -sfn "${ARKA_DS}/testing" "${DSGN}/data/awsim/testing"
 
 echo ""
 echo "DSGN Arka-compatible env ready: conda activate ${ENV_NAME}"
 echo "  (or: source ${CONDA_ROOT}/etc/profile.d/conda.sh && conda activate ${ENV_NAME})"
-echo "Run inference: bash ${ROOT}/scripts/dsgn_run_inference_pt13.sh"
+echo "Run inference: bash ${ARCHIVE}/dsgn_run_inference_pt13.sh"
 echo ""
 echo "Note: CPU-only by default. Expect ~minutes per frame on L40S host."
 
