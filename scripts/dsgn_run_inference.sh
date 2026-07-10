@@ -18,7 +18,7 @@ ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
 ADRIA_DS="${ROOT}/dsgn/datasets/adria/dsgn_awsim"
 
 DATA_PATH="${DATA_PATH:-${ARKA_DS}/testing_offline}"
-SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline.txt}"
+SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline_debug.txt}"
 CFG="${CFG:-${DSGN}/configs/config_car_12g_awsim.py}"
 LOADMODEL="${LOADMODEL:-${ROOT}/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar}"
 DETECTIONS_DIR="${DETECTIONS_DIR:-${ROOT}/dsgn/detections/adria}"
@@ -59,7 +59,7 @@ python test_no_eval.py \
   --tag "${TAG}"
 
 # test_no_eval.py writes next to the checkpoint; move to dsgn/detections/adria/.
-RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}"
+RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}" # Arka's output, which we'll overwrite.
 OUT_DIR="${DETECTIONS_DIR}/${TAG#_}"
 if [[ -d "${RAW_OUT}" ]]; then
   mkdir -p "${DETECTIONS_DIR}"

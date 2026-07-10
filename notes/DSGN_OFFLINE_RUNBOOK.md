@@ -221,29 +221,33 @@ Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its R
 | Config | `~/summer26/external/DSGN_custom/configs/config_car_12g_awsim.py` |
 | Checkpoint | `~/summer26/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar` |
 
-`scripts/dsgn_run_inference.sh` defaults to the **patched** dataset (`testing_offline_patched`). Override with `DATA_PATH=.../testing_offline` for clean images.
+`scripts/dsgn_run_inference.sh` defaults to the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images. (`scripts/dsgn_run_inference_docker.sh` still defaults to `testing_offline_patched`.)
 
 **Inference** (`dsgn_run_inference.sh` moves KITTI txt to `dsgn/detections/adria/<tag>/`):
 
 ```bash
-# Patched images (default in dsgn_run_inference.sh)
+# Clean images, full offline split (default)
 bash ~/summer26/scripts/dsgn_run_inference.sh
 
+# Patched images (adversarial)
+DATA_PATH=~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched \
+  TAG=_patched_100_135 \
+  bash ~/summer26/scripts/dsgn_run_inference.sh
+
 # Clean images, 3-frame validation split
-DATA_PATH=~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline \
-  SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt \
+SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt \
   TAG=_validate_clean \
   bash ~/summer26/scripts/dsgn_run_inference.sh
 ```
 
-Manual equivalent:
+Manual equivalent (clean default — create `data/awsim` symlinks first, or use `dsgn_run_inference.sh`):
 
 ```bash
 cd ~/summer26/external/DSGN_custom
 
 python3 tools/test_no_eval.py \
   --cfg configs/config_car_12g_awsim.py \
-  --data_path ~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched \
+  --data_path ~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline \
   --split_file ~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt \
   --loadmodel ~/summer26/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar \
   -btest 1 \
