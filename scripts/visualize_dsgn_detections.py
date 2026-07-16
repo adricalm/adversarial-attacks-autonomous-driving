@@ -56,8 +56,8 @@ def compute_box_3d(dim, loc, ry) -> np.ndarray:
     h, w, l = dim
     x, y, z = loc
     x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2]
-    z_corners = [h / 2, h / 2, h / 2, h / 2, -h / 2, -h / 2, -h / 2, -h / 2]
-    y_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
+    y_corners = [0, 0, 0, 0, -h, -h, -h, -h]
+    z_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
     corners = np.array([x_corners, y_corners, z_corners])
     r = np.array(
         [
@@ -91,6 +91,11 @@ def draw_projected_box3d(img, qs, color=(0, 255, 0), thickness=2):
     return img
 
 
+# DSGN AWSIM loader downsamples 1920×1080 → 960×540; written 2D bboxes are in
+# that half-res pixel space. Images + P2 calib used for viz are full-res.
+INFER_HW = (540, 960)  # (H, W) matching KITTILoader_* downscale_factor=0.5
+
+
 def annotate_frame(
     img,
     detections: list[dict],
@@ -99,6 +104,9 @@ def annotate_frame(
     only_cars: bool,
 ) -> np.ndarray:
     out = img.copy()
+    img_h, img_w = out.shape[:2]
+    sx = img_w / INFER_HW[1]
+    sy = img_h / INFER_HW[0]
     kept = 0
     for det in detections:
         if only_cars and det["type"].lower() != "car":
@@ -107,20 +115,28 @@ def annotate_frame(
         if min_score is not None and (score is None or score < min_score):
             continue
 
-        x1, y1, x2, y2 = [int(round(v)) for v in det["bbox"]]
+        # 2D bbox is in inference (half-res) coords; scale to display image.
+        x1, y1, x2, y2 = det["bbox"]
+        x1, x2 = int(round(x1 * sx)), int(round(x2 * sx))
+        y1, y2 = int(round(y1 * sy)), int(round(y2 * sy))
         cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 255), 1)
 
+        # 3D→2D uses full-res P2 on the full-res image — already correct.
         corners_3d = compute_box_3d(det["dimensions"], det["location"], det["rotation_y"])
         corners_2d = project_to_image(corners_3d, p2)
         draw_projected_box3d(out, corners_2d, color=(0, 255, 0), thickness=2)
 
+        # Anchor text to the projected 3D box (not the 2D rect) — the stored 2D
+        # bbox can still disagree slightly with the 3D projection after scaling.
         label = det["type"]
         if score is not None:
             label = f"{label} {score:.2f}"
+        tx = int(round(float(corners_2d[0].mean())))
+        ty = int(round(float(corners_2d[1].min()))) - 8
         cv2.putText(
             out,
             label,
-            (max(x1, 0), max(y1 - 8, 12)),
+            (max(tx, 0), max(ty, 12)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,
             (0, 255, 255),
@@ -147,9 +163,9 @@ def main() -> int:
     parser.add_argument("--images", required=True, help="Path to image_2/")
     parser.add_argument("--calib", required=True, help="Path to calib/")
     parser.add_argument("--detections", required=True, help="Path to awsim_output_* folder")
-    parser.add_argument("--frames", required=True, help="Comma-separated frame ids, e.g. 000010,000099")
+    parser.add_argument("--frames", default=None, help="Comma-separated frame ids, e.g. 000010,000099")
     parser.add_argument("--output", required=True, help="Output directory for PNGs")
-    parser.add_argument("--label", default="det", help="Prefix for output filenames")
+    parser.add_argument("--label", default="_", help="Prefix for output filenames")
     parser.add_argument("--min-score", type=float, default=None, help="Optional score filter")
     parser.add_argument("--all-classes", action="store_true", help="Draw non-car classes too")
     args = parser.parse_args()
@@ -160,7 +176,10 @@ def main() -> int:
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    frames = [f.strip() for f in args.frames.split(",") if f.strip()]
+    if args.frames is None:
+        frames = sorted(p.stem for p in det_dir.glob("*.txt"))
+    else:
+        frames = [f.strip() for f in args.frames.split(",") if f.strip()]
     only_cars = not args.all_classes
 
     for frame in frames:
