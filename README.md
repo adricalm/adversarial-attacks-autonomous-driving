@@ -82,8 +82,10 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 │       └── extracted/                   # AWSIM binary
 │   └── bags/                            # experiment rosbags (gitignored; owned by adria on host)
 ├── dsgn/                                # DSGN pipeline — datasets, checkpoints, detections (gitignored bulk)
-│   ├── datasets/arka/dsgn_awsim/        # Arka reference KITTI-layout stereo data
-│   ├── datasets/adria/dsgn_awsim/       # adria patches and derived datasets
+│   ├── datasets/arka/dsgn_awsim/        # testing + testing_offline + split .txt (no training/)
+│   ├── datasets/adria/
+│   │   ├── dsgn_awsim/                  # adria patches / derived AWSIM experiments
+│   │   └── training_kitti_labels/       # ONLY training set (KITTI-converted label_2)
 │   ├── checkpoints/                   # .tar weights only (arka / kitti / adria)
 │   ├── detections/                    # per-frame KITTI .txt inference outputs
 │   └── training_logs/
@@ -126,9 +128,19 @@ git push -u origin master   # dsgn_offline uses main
 
 **Workflow:** edit inside the nested repo → `git commit` / `git push` there. Only commit integration docs, scripts, and small configs in `summer26`. Clone the forks locally after a fresh checkout (they are not bundled in this repo).
 
-**`dsgn/datasets/arka/dsgn_awsim` note:** Arka's reference KITTI-layout dataset — read-only baseline for training and inference. Adria's derived data (patches, patched images) lives under `dsgn/datasets/adria/dsgn_awsim/`.
+**Dataset split (disk space):** Training lives only under **`dsgn/datasets/adria/training_kitti_labels/`** (KITTI-converted `label_2`). Arka’s original `training/` was removed to free space. Keep using Arka for **`testing/`**, **`testing_offline/`**, and split files (`trainval.txt`, `test_offline*.txt`, …). Details: [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md).
 
-**DSGN inference on this host (L40S):** Arka's checkpoint was trained with PyTorch 1.3. Faithful re-inference is **not possible here** — PT 1.3 needs an older GPU (CUDA 10.1; no L40S/Ada support) and DSGN's CUDA ops cannot run CPU-only. PT 2.6 (`external/DSGN_custom/.venv`, `scripts/dsgn_run_inference.sh`) runs on the L40S but produces **wrong detections** vs Arka's baseline. Host PT 1.3/1.10 scripts are **archived** under `scripts/archive/dsgn_pt_experiments/` (do not use on this machine). For Autoware experiments, replay Arka's precomputed outputs via [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md). Full matrix and validation: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md).
+**DSGN on this host (L40S) — two different stories:**
+
+| Checkpoint | PT 2.6 on L40S | Notes |
+|------------|----------------|-------|
+| Official KITTI **`finetune_48`** | **Works** on AWSIM once config matches half-res loader | `input_size=[540,960]`, `output_size=[135,240]`; viz with `--box-convention kitti` |
+| Arka AWSIM **`finetune_60`** | **Unfaithful** vs Arka baseline | Trained PT 1.3; prefer precomputed dumps or old-GPU Docker |
+
+Geometry, label convention, and finetune strategy: **[`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md)**.  
+PyTorch / GPU matrix: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md). Offline Autoware replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
+
+**Useful scripts:** `dsgn_run_inference.sh`, `dsgn_finetune_awsim.sh` (`MODE=det_head\|gentle`), `dsgn_transform_label.py`, `visualize_dsgn_detections.py`.
 
 ---
 
@@ -327,6 +339,11 @@ Healthy end state: `state: 5`, `velocity > 0`, MRM `state: 1`, `hazard emergency
 | `scripts/dsgn_offline_run.sh` | **Inside Docker:** run offline detection publisher; set `DETECTION_FOLDER` for attack outputs |
 | `scripts/01_gui_preflight.sh` | **Host:** GUI / display sanity checks |
 | `notes/DSGN_OFFLINE_RUNBOOK.md` | Full copy-paste workflow for DSGN offline integration |
+| `notes/DSGN_AWSIM_FINDINGS.md` | AWSIM geometry fix, label convention, finetune decisions |
+| `notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md` | det_head adapt run (paths + recipe; results not great) |
+| `scripts/dsgn_transform_label.py` | **Host:** AWSIM `label_2` → KITTI for training |
+| `scripts/dsgn_finetune_awsim.sh` | **Host:** adapt `finetune_48` (`MODE=det_head` / `gentle`) |
+| `scripts/visualize_dsgn_detections.py` | **Host:** viz with `--box-convention {kitti,awsim}` |
 
 ---
 
@@ -347,7 +364,8 @@ See `dsgn/` for datasets, checkpoints, and detection outputs; DSGN forks above f
 - DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately (see layout above)
 - Map: Autoware Nishi-Shinjuku sample (`lanelet2_map.osm` + pointcloud)
 - AWSIM Labs v1.6.1: `data/awsim/`
-- DSGN reference dataset (Arka): `dsgn/datasets/arka/dsgn_awsim/` (on disk only, not in git)
+- DSGN datasets: train = `dsgn/datasets/adria/training_kitti_labels/`; test/offline = `dsgn/datasets/arka/dsgn_awsim/` (Arka `training/` removed for disk)
 - Pitfalls, diagnostics chain, changelog: [`notes/DEBUG_LOG.md`](notes/DEBUG_LOG.md)
 - DSGN offline replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md)
+- DSGN AWSIM findings (geometry, labels, finetune): [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md)
 - DSGN PyTorch / GPU constraints: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md)
