@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
-"""Draw DSGN KITTI detections on AWSIM left images and save PNGs.
+"""Draw DSGN / KITTI-format 3D boxes on AWSIM left images and save PNGs.
 
-Based on external/DSGN_custom/tools/plot_BB3D_awsim.py (Arka), but writes files
-instead of cv2.imshow so it works over SSH.
+Two box conventions (see --box-convention):
+
+  kitti  — standard KITTI label_2 / official DSGN KITTI checkpoints
+           fields 8,9,10 = height, width, length
+           location = bottom-center of the box (y down in camera)
+
+  awsim  — Arka's AWSIM plotter (tools/plot_BB3D_awsim.py)
+           same three numbers, but mapped differently to axes:
+             field8 → length (object forward), field9 → height, field10 → width
+           location = box center (± half-extents)
+           Use for: awsim_output_offline, Arka AWSIM checkpoints, AWSIM label_2
 
 Usage:
+  # Official KITTI finetune_48 detections
   python scripts/visualize_dsgn_detections.py \\
-    --images dsgn/datasets/arka/dsgn_awsim/testing_offline/image_2 \\
-    --calib dsgn/datasets/arka/dsgn_awsim/testing_offline/calib \\
-    --detections dsgn/detections/adria/finetune_60_val \\
-    --frames 000010,000099,000105 \\
-    --label finetune_60 \\
-    --output dsgn/datasets/adria/dsgn_awsim/detection_previews
+    --box-convention kitti \\
+    --images .../image_2 --calib .../calib --detections .../finetune_48_... \\
+    --frames 000105 --output /tmp/viz --label kitti
+
+  # Arka offline / AWSIM GT
+  python scripts/visualize_dsgn_detections.py \\
+    --box-convention awsim --full-res-bbox \\
+    --images .../image_2 --calib .../calib \\
+    --detections src/dsgn_offline/resource/awsim_output_offline \\
+    --frames 000200 --output /tmp/viz --label awsim
 """
 from __future__ import annotations
 
@@ -52,12 +66,13 @@ def read_kitti_calib(calib_file: Path) -> np.ndarray:
     raise ValueError(f"P2 matrix not found in {calib_file}")
 
 
-def compute_box_3d(dim, loc, ry) -> np.ndarray:
+def compute_box_3d_kitti(dim, loc, ry) -> np.ndarray:
+    """KITTI: dim=(h,w,l), loc=bottom-center, camera y points down."""
     h, w, l = dim
     x, y, z = loc
     x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2]
-    z_corners = [h / 2, h / 2, h / 2, h / 2, -h / 2, -h / 2, -h / 2, -h / 2]
-    y_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
+    y_corners = [0, 0, 0, 0, -h, -h, -h, -h]
+    z_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
     corners = np.array([x_corners, y_corners, z_corners])
     r = np.array(
         [
@@ -71,6 +86,44 @@ def compute_box_3d(dim, loc, ry) -> np.ndarray:
     corners_3d[1, :] += y
     corners_3d[2, :] += z
     return corners_3d
+
+
+def compute_box_3d_awsim(dim, loc, ry) -> np.ndarray:
+    """Arka AWSIM plotter: same file fields, different axis mapping + center loc.
+
+    Matches external/DSGN_custom/tools/plot_BB3D_awsim.py exactly:
+      stored (a,b,c) = fields 8,9,10
+      object X (lateral)  = ±c/2
+      object Y (vertical) = ±b/2   ← so field9 is height
+      object Z (length)   = ±a/2   ← so field8 is length
+      location = center of the box
+    """
+    a, b, c = dim  # file fields 8,9,10 (not KITTI h,w,l meanings)
+    x, y, z = loc
+    x_corners = [c / 2, c / 2, -c / 2, -c / 2, c / 2, c / 2, -c / 2, -c / 2]
+    y_corners = [b / 2, -b / 2, -b / 2, b / 2, b / 2, -b / 2, -b / 2, b / 2]
+    z_corners = [a / 2, a / 2, a / 2, a / 2, -a / 2, -a / 2, -a / 2, -a / 2]
+    corners = np.array([x_corners, y_corners, z_corners])
+    r = np.array(
+        [
+            [np.cos(ry), 0, np.sin(ry)],
+            [0, 1, 0],
+            [-np.sin(ry), 0, np.cos(ry)],
+        ]
+    )
+    corners_3d = r @ corners
+    corners_3d[0, :] += x
+    corners_3d[1, :] += y
+    corners_3d[2, :] += z
+    return corners_3d
+
+
+def compute_box_3d(dim, loc, ry, convention: str) -> np.ndarray:
+    if convention == "kitti":
+        return compute_box_3d_kitti(dim, loc, ry)
+    if convention == "awsim":
+        return compute_box_3d_awsim(dim, loc, ry)
+    raise ValueError(f"unknown box convention: {convention}")
 
 
 def project_to_image(pts_3d: np.ndarray, p: np.ndarray) -> np.ndarray:
@@ -91,14 +144,28 @@ def draw_projected_box3d(img, qs, color=(0, 255, 0), thickness=2):
     return img
 
 
+# DSGN AWSIM loader downsamples 1920×1080 → 960×540; model-written 2D bboxes
+# are often in that half-res space. Full-res training label_2 / some offline
+# dumps need --full-res-bbox.
+INFER_HW = (540, 960)  # (H, W) matching KITTILoader_* downscale_factor=0.5
+
+
 def annotate_frame(
     img,
     detections: list[dict],
     p2: np.ndarray,
     min_score: float | None,
     only_cars: bool,
+    bbox_full_res: bool = False,
+    box_convention: str = "kitti",
 ) -> np.ndarray:
     out = img.copy()
+    img_h, img_w = out.shape[:2]
+    if bbox_full_res:
+        sx = sy = 1.0
+    else:
+        sx = img_w / INFER_HW[1]
+        sy = img_h / INFER_HW[0]
     kept = 0
     for det in detections:
         if only_cars and det["type"].lower() != "car":
@@ -107,20 +174,26 @@ def annotate_frame(
         if min_score is not None and (score is None or score < min_score):
             continue
 
-        x1, y1, x2, y2 = [int(round(v)) for v in det["bbox"]]
+        x1, y1, x2, y2 = det["bbox"]
+        x1, x2 = int(round(x1 * sx)), int(round(x2 * sx))
+        y1, y2 = int(round(y1 * sy)), int(round(y2 * sy))
         cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 255), 1)
 
-        corners_3d = compute_box_3d(det["dimensions"], det["location"], det["rotation_y"])
+        corners_3d = compute_box_3d(
+            det["dimensions"], det["location"], det["rotation_y"], box_convention
+        )
         corners_2d = project_to_image(corners_3d, p2)
         draw_projected_box3d(out, corners_2d, color=(0, 255, 0), thickness=2)
 
         label = det["type"]
         if score is not None:
             label = f"{label} {score:.2f}"
+        tx = int(round(float(corners_2d[0].mean())))
+        ty = int(round(float(corners_2d[1].min()))) - 8
         cv2.putText(
             out,
             label,
-            (max(x1, 0), max(y1 - 8, 12)),
+            (max(tx, 0), max(ty, 12)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,
             (0, 255, 255),
@@ -131,7 +204,7 @@ def annotate_frame(
 
     cv2.putText(
         out,
-        f"detections shown: {kept}",
+        f"detections shown: {kept} [{box_convention}]",
         (20, 40),
         cv2.FONT_HERSHEY_SIMPLEX,
         1.0,
@@ -143,15 +216,28 @@ def annotate_frame(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Visualize DSGN KITTI detections on AWSIM images")
+    parser = argparse.ArgumentParser(
+        description="Visualize DSGN detections (KITTI or Arka-AWSIM box convention)"
+    )
     parser.add_argument("--images", required=True, help="Path to image_2/")
     parser.add_argument("--calib", required=True, help="Path to calib/")
-    parser.add_argument("--detections", required=True, help="Path to awsim_output_* folder")
-    parser.add_argument("--frames", required=True, help="Comma-separated frame ids, e.g. 000010,000099")
+    parser.add_argument("--detections", required=True, help="Folder of KITTI-format .txt")
+    parser.add_argument("--frames", default=None, help="Comma-separated frame ids")
     parser.add_argument("--output", required=True, help="Output directory for PNGs")
-    parser.add_argument("--label", default="det", help="Prefix for output filenames")
+    parser.add_argument("--label", default="_", help="Prefix for output filenames")
     parser.add_argument("--min-score", type=float, default=None, help="Optional score filter")
     parser.add_argument("--all-classes", action="store_true", help="Draw non-car classes too")
+    parser.add_argument(
+        "--full-res-bbox",
+        action="store_true",
+        help="2D bboxes already in image pixel space (training label_2 / some offline dumps)",
+    )
+    parser.add_argument(
+        "--box-convention",
+        choices=("kitti", "awsim"),
+        default="kitti",
+        help="kitti: official KITTI / finetune_48. awsim: Arka plot_BB3D_awsim / offline / AWSIM GT",
+    )
     args = parser.parse_args()
 
     image_dir = Path(args.images)
@@ -160,7 +246,10 @@ def main() -> int:
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    frames = [f.strip() for f in args.frames.split(",") if f.strip()]
+    if args.frames is None:
+        frames = sorted(p.stem for p in det_dir.glob("*.txt"))
+    else:
+        frames = [f.strip() for f in args.frames.split(",") if f.strip()]
     only_cars = not args.all_classes
 
     for frame in frames:
@@ -176,11 +265,19 @@ def main() -> int:
 
         p2 = read_kitti_calib(calib_path)
         detections = read_kitti_detection(det_path)
-        annotated = annotate_frame(img, detections, p2, args.min_score, only_cars)
+        annotated = annotate_frame(
+            img,
+            detections,
+            p2,
+            args.min_score,
+            only_cars,
+            bbox_full_res=args.full_res_bbox,
+            box_convention=args.box_convention,
+        )
 
         out_path = out_dir / f"{frame}_{args.label}.png"
         cv2.imwrite(str(out_path), annotated)
-        print(f"wrote {out_path} ({len(detections)} lines in txt)")
+        print(f"wrote {out_path} ({len(detections)} lines, convention={args.box_convention})")
 
     return 0
 

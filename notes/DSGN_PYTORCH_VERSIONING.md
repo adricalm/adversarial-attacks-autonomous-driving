@@ -1,7 +1,9 @@
 # DSGN PyTorch versioning
 
+**Scope:** Arka’s AWSIM `finetune_60` vs PT on the L40S. For half-res config, label convention, and official `finetune_48` on AWSIM, see [`DSGN_AWSIM_FINDINGS.md`](DSGN_AWSIM_FINDINGS.md) — PT version is not the whole story.
+
 Arka's `finetune_60.tar` was trained with **PyTorch 1.3.0** (`external/DSGN_custom/requirement.txt`).  
-Running inference with PyTorch 2.6 produces garbage (46 false cars on frame 000010 vs 0 in the Arka baseline).
+Running **that** checkpoint with PyTorch 2.6 produces garbage (46 false cars on frame 000010 vs 0 in the Arka baseline). Official KITTI `finetune_48` + corrected AWSIM config is a separate, working path on PT 2.6.
 
 ## Recommended environments (active scripts)
 

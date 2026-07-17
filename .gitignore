@@ -33,6 +33,7 @@ data/maps/**/*.float_backup*
 # Leftover Docker-owned dirs (need sudo to delete; safe to ignore)
 data/autoware_data/diag/
 data/autoware_data/loc_src/
+external/DSGN2_awsim/data/
 
 # Experiment rosbags (large; keep under ~/summer26/data/bags/)
 data/bags/*
@@ -48,3 +49,7 @@ __pycache__/
 # Editor
 .vscode/
 *.swp
+
+
+# coding agents
+AGENTS.md
