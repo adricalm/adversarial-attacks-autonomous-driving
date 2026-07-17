@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fine-tune DSGN on AWSIM stereo data (PyTorch 2.6).
 #
+#
 # Usage:
 #   bash scripts/dsgn_train.sh
 #   DEBUG=1 EPOCHS=1 bash scripts/dsgn_train.sh   # smoke test
@@ -11,10 +12,12 @@ ROOT="${HOME}/summer26"
 DSGN="${ROOT}/external/DSGN_custom"
 VENV="${DSGN}/.venv"
 ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
+ADRIA_TRAIN="${ROOT}/dsgn/datasets/adria/training_kitti_labels"
 KITTI_CKPT="${ROOT}/dsgn/checkpoints/kitti/dsgn_12g_b"
 ADRIA_CKPT="${ROOT}/dsgn/checkpoints/adria/dsgn_12g_awsim"
 
-DATA_PATH="${DATA_PATH:-${ARKA_DS}/training}"
+# Arka training/ was removed to free disk; train only from adria KITTI-converted labels.
+DATA_PATH="${DATA_PATH:-${ADRIA_TRAIN}}"
 SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/trainval.txt}"
 CFG="${CFG:-${DSGN}/configs/config_car_12g_awsim.py}"
 LOADMODEL="${LOADMODEL:-${KITTI_CKPT}/finetune_48.tar}"
