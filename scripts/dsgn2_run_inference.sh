@@ -2,6 +2,15 @@
 # Run DSGN++ inference inside PyTorch 1.7.1 Docker image on AWSIM KITTI-layout data.
 # Requires: sudo docker, image built via dsgn2_build_docker.sh
 #
+# Data layout (NOT real KITTI — AWSIM testing_offline in KITTI folder shape):
+#   dsgn/datasets/adria/dsgn2_awsim/training -> arka/dsgn_awsim/testing_offline
+# Inside Docker only: /workspace/DSGN2/data/kitti -> same adria/dsgn2_awsim path.
+# Do not use external/DSGN2_awsim/data/ on the host (stale symlink if present).
+#
+# Outputs (Autoware needs 3D KITTI txt under detections/dsgn2/):
+#   dsgn/detections/dsgn2/*.txt     — 3D boxes (final_result/data)
+#   dsgn/detections/dsgn2/2d/*.txt  — auxiliary 2D head only (final_result/data2d)
+#
 # Usage:
 #   bash ~/summer26/scripts/dsgn2_run_inference.sh
 #   SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_debug.txt bash scripts/dsgn2_run_inference.sh
@@ -12,6 +21,9 @@ ROOT="${HOME}/summer26"
 source "${ROOT}/scripts/dsgn2_docker_common.sh"
 IMAGE="${DSGN2_DOCKER_IMAGE}"
 DSGN2="/workspace/DSGN2"
+DSGN2_HOST="${ROOT}/external/DSGN2_awsim"
+DSGN2_CONFIGS_HOST="${DSGN2_HOST}/configs"
+CFG_FILE="${CFG_FILE:-./configs/stereo/kitti_models/dsgn2_awsim.yaml}"
 ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
 DSGN2_DATA="${ROOT}/dsgn/datasets/adria/dsgn2_awsim"
 SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline_debug.txt}"
@@ -19,24 +31,26 @@ CKPT_DIR="${ROOT}/dsgn/checkpoints/dsgn2/kitti_pretrained"
 CKPT="${CKPT:-${CKPT_DIR}/checkpoint_epoch_60.pth}"
 GDRIVE_ID="${DSGN2_GDRIVE_ID:-1Z160fDx5abFZUARso1ixNJH-4UpjA4LI}"
 DETECTIONS_DIR="${DETECTIONS_DIR:-${ROOT}/dsgn/detections/dsgn2}"
+DETECTIONS_2D_DIR="${DETECTIONS_2D_DIR:-${DETECTIONS_DIR}/2d}"
 EVAL_TAG="${EVAL_TAG:-awsim_debug}"
 LOG_DIR="${ROOT}/logs"
 LOG_FILE="${LOG_DIR}/dsgn2_inference_$(date +%Y%m%d_%H%M%S).log"
 
-mkdir -p "${LOG_DIR}" "${CKPT_DIR}" "${DSGN2_DATA}/ImageSets" "${DETECTIONS_DIR}"
+mkdir -p "${LOG_DIR}" "${CKPT_DIR}" "${DSGN2_DATA}/ImageSets" "${DETECTIONS_DIR}" "${DETECTIONS_2D_DIR}"
 
 if [[ ! -f "${SPLIT_FILE}" ]]; then
   echo "error: split file not found: ${SPLIT_FILE}" >&2
   exit 1
 fi
 
-# --- Host: lay out AWSIM data as KITTI for DSGN2/OpenPCDet ---
-ln -sfn "${ARKA_DS}/testing_offline" "${DSGN2_DATA}/training"
-if [[ -d "${ARKA_DS}/testing" ]]; then
-  ln -sfn "${ARKA_DS}/testing" "${DSGN2_DATA}/testing"
-else
-  ln -sfn "${ARKA_DS}/testing_offline" "${DSGN2_DATA}/testing"
+if [[ ! -f "${DSGN2_HOST}/${CFG_FILE#./}" ]]; then
+  echo "error: DSGN2 config not found: ${DSGN2_HOST}/${CFG_FILE#./}" >&2
+  exit 1
 fi
+
+# --- Host: lay out AWSIM testing_offline as KITTI training/ for val inference ---
+ln -sfn "${ARKA_DS}/testing_offline" "${DSGN2_DATA}/training"
+ln -sfn "${ARKA_DS}/testing_offline" "${DSGN2_DATA}/testing"
 
 cp "${SPLIT_FILE}" "${DSGN2_DATA}/ImageSets/val.txt"
 head -1 "${SPLIT_FILE}" > "${DSGN2_DATA}/ImageSets/train.txt"
@@ -61,10 +75,14 @@ fi
 
 echo "=== Gate 4: DSGN++ inference on AWSIM frames ===" | tee "${LOG_FILE}"
 echo "Split: ${SPLIT_FILE}" | tee -a "${LOG_FILE}"
+echo "Config: ${CFG_FILE}" | tee -a "${LOG_FILE}"
+echo "DSGN2 configs: ${DSGN2_CONFIGS_HOST}" | tee -a "${LOG_FILE}"
 echo "Checkpoint: ${CKPT}" | tee -a "${LOG_FILE}"
 
+# Mount only configs/ — full repo mount would hide image-built CUDA ops (iou3d_nms_cuda, etc.).
 sudo docker run --rm "${DSGN2_GPU_FLAG[@]}" "${DSGN2_LIB_ENV[@]}" \
   -v "${ROOT}:${ROOT}" \
+  -v "${DSGN2_CONFIGS_HOST}:${DSGN2}/configs" \
   -w "${DSGN2}" \
   -e HOME=/tmp \
   "${IMAGE}" \
@@ -89,35 +107,64 @@ sudo docker run --rm "${DSGN2_GPU_FLAG[@]}" "${DSGN2_LIB_ENV[@]}" \
       --launcher none \
       --workers 2 \
       --save_to_file \
-      --cfg_file ./configs/stereo/kitti_models/dsgn2.yaml \
+      --cfg_file ${CFG_FILE} \
       --ckpt ${CKPT} \
       --eval_tag ${EVAL_TAG}
   " 2>&1 | tee -a "${LOG_FILE}"
 
-# Collect detection txt files from eval output dir (3D preferred, 2D fallback).
+# Collect 3D and 2D detection txt separately (never mix — Autoware needs 3D only).
 EVAL_BASE="${CKPT}.eval/eval/epoch_60/val/${EVAL_TAG}"
 EVAL_3D="${EVAL_BASE}/final_result/data"
 EVAL_2D="${EVAL_BASE}/final_result/data2d"
+
+count_nonempty_txt() {
+  local dir="$1"
+  local n=0
+  if [[ -d "${dir}" ]]; then
+    local f
+    for f in "${dir}"/*.txt; do
+      [[ -f "${f}" && -s "${f}" ]] && n=$((n + 1))
+    done
+  fi
+  echo "${n}"
+}
+
 if [[ -d "${EVAL_3D}" ]] && compgen -G "${EVAL_3D}/*.txt" > /dev/null; then
   cp -f "${EVAL_3D}"/*.txt "${DETECTIONS_DIR}/"
-elif [[ -d "${EVAL_2D}" ]]; then
-  cp -f "${EVAL_2D}"/*.txt "${DETECTIONS_DIR}/"
+fi
+if [[ -d "${EVAL_2D}" ]] && compgen -G "${EVAL_2D}/*.txt" > /dev/null; then
+  cp -f "${EVAL_2D}"/*.txt "${DETECTIONS_2D_DIR}/"
 fi
 cp -f "${EVAL_BASE}/log_eval.txt" "${DETECTIONS_DIR}/" 2>/dev/null || true
 
+n_3d_frames="$(count_nonempty_txt "${EVAL_3D}")"
+n_2d_frames="$(count_nonempty_txt "${EVAL_2D}")"
 echo "" | tee -a "${LOG_FILE}"
-echo "=== Detection counts (Gate 4 pass: 000010 ~0, 000099 ~2, 000105 ~2) ===" | tee -a "${LOG_FILE}"
+echo "=== Outputs: 3D -> ${DETECTIONS_DIR}  |  2D head -> ${DETECTIONS_2D_DIR} ===" | tee -a "${LOG_FILE}"
+echo "  frames with non-empty 3D txt: ${n_3d_frames}" | tee -a "${LOG_FILE}"
+echo "  frames with non-empty 2D txt: ${n_2d_frames}" | tee -a "${LOG_FILE}"
+if [[ "${n_3d_frames}" -eq 0 ]]; then
+  echo "  NOTE: no 3D detections — dsgn/detections/dsgn2/*.txt may be empty or absent." | tee -a "${LOG_FILE}"
+  echo "        Check dsgn/detections/dsgn2/2d/ for auxiliary 2D-head output only." | tee -a "${LOG_FILE}"
+fi
+
+echo "" | tee -a "${LOG_FILE}"
+echo "=== Detection counts vs baseline (3D in detections/dsgn2, not 2d/) ===" | tee -a "${LOG_FILE}"
 BASELINE="${ROOT}/src/dsgn_offline/resource/awsim_output_offline"
 for frame in 000010 000099 000105; do
   det_file="${DETECTIONS_DIR}/${frame}.txt"
+  det2d_file="${DETECTIONS_2D_DIR}/${frame}.txt"
   base_file="${BASELINE}/${frame}.txt"
   det_n=0
+  det2d_n=0
   base_n=0
-  [[ -f "${det_file}" ]] && det_n=$(wc -l < "${det_file}")
+  [[ -f "${det_file}" && -s "${det_file}" ]] && det_n=$(wc -l < "${det_file}")
+  [[ -f "${det2d_file}" ]] && det2d_n=$(wc -l < "${det2d_file}")
   [[ -f "${base_file}" ]] && base_n=$(wc -l < "${base_file}")
-  echo "  ${frame}: dsgn2=${det_n}  baseline=${base_n}" | tee -a "${LOG_FILE}"
+  echo "  ${frame}: dsgn2_3d=${det_n}  dsgn2_2d=${det2d_n}  baseline=${base_n}" | tee -a "${LOG_FILE}"
 done
 
 echo ""
-echo "Detections dir: ${DETECTIONS_DIR}"
+echo "3D detections: ${DETECTIONS_DIR}"
+echo "2D detections: ${DETECTIONS_2D_DIR}"
 echo "Full log: ${LOG_FILE}"
