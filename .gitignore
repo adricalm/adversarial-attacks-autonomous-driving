@@ -49,3 +49,7 @@ __pycache__/
 # Editor
 .vscode/
 *.swp
+
+
+# coding agents
+AGENTS.md
