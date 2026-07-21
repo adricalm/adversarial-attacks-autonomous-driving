@@ -3,7 +3,7 @@
 #
 # Usage:
 #   bash scripts/archive/dsgn_pt_experiments/dsgn_run_inference_pt13.sh
-#   DATA_PATH=~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched \
+#   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched \
 #     TAG=_patched_100_135_pt13 bash scripts/archive/dsgn_pt_experiments/dsgn_run_inference_pt13.sh
 set -eo pipefail
 
@@ -13,7 +13,7 @@ DSGN="${ROOT}/external/DSGN_custom"
 CONDA_ROOT="${ROOT}/.conda/miniconda3"
 ENV_NAME="dsgn-pt13"
 ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
-ADRIA_DS="${ROOT}/dsgn/datasets/adria/dsgn_awsim"
+ADRIA_DS="${ROOT}/dsgn/datasets/adria"
 
 DATA_PATH="${DATA_PATH:-${ADRIA_DS}/testing_offline_patched}"
 SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline.txt}"
