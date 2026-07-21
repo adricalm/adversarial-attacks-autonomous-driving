@@ -213,11 +213,11 @@ Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its R
 | Item | Path |
 | ---- | ---- |
 | Clean dataset (Arka) | `~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline/` |
-| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched/` — built by `scripts/apply_stereo_patches.py` from clean images + `patches_100_200.csv` |
+| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/testing_offline_patched/` — built by `scripts/apply_stereo_patches.py` from clean images + `patches_100_200.csv` |
 | Full offline split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt` (214 frames) |
 | Quick validation split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt` (frames 000010, 000099, 000105) |
 | Single-frame validation | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_frame10.txt` (frame 000010 only) |
-| Patch config | `~/summer26/dsgn/datasets/adria/dsgn_awsim/patches_100_200.csv` |
+| Patch config | `~/summer26/dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv` |
 | Config | `~/summer26/external/DSGN_custom/configs/config_car_12g_awsim.py` |
 | Checkpoint | `~/summer26/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar` |
 
@@ -230,7 +230,7 @@ Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its R
 bash ~/summer26/scripts/dsgn_run_inference.sh
 
 # Patched images (adversarial)
-DATA_PATH=~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched \
+DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched \
   TAG=_patched_100_135 \
   bash ~/summer26/scripts/dsgn_run_inference.sh
 
