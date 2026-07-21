@@ -15,7 +15,7 @@ DSGN="${ROOT}/external/DSGN_custom"
 IMAGE="${DSGN_DOCKER_IMAGE:-dsgn-pt13:cuda10.1}"
 PATCH_FILE="${ROOT}/scripts/patches/dsgn_csrc_pt26.patch"
 ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
-ADRIA_DS="${ROOT}/dsgn/datasets/adria/dsgn_awsim"
+ADRIA_DS="${ROOT}/dsgn/datasets/adria"
 
 DATA_PATH="${DATA_PATH:-${ADRIA_DS}/testing_offline_patched}"
 SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline.txt}"

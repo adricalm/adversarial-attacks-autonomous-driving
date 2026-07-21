@@ -8,14 +8,14 @@
 #
 # Usage:
 #   bash scripts/dsgn_run_inference.sh
-#   DATA_PATH=~/summer26/dsgn/datasets/adria/dsgn_awsim/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
+#   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
 DSGN="${ROOT}/external/DSGN_custom"
 VENV="${DSGN}/.venv"
 ARKA_DS="${ROOT}/dsgn/datasets/arka/dsgn_awsim"
-ADRIA_DS="${ROOT}/dsgn/datasets/adria/dsgn_awsim"
+ADRIA_DS="${ROOT}/dsgn/datasets/adria"
 
 DATA_PATH="${DATA_PATH:-${ARKA_DS}/testing_offline}"
 SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/test_offline_debug.txt}"
