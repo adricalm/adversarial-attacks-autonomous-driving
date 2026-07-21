@@ -58,18 +58,23 @@ if [[ "${STATE}" -eq 5 || "${MODE}" -eq 2 ]]; then
   echo "  after stop: state=$(autoware_state) mode=$(operation_mode)"
 fi
 
-# ── 3. Bridge ────────────────────────────────────────────────────
+# ── 3. Bridge (optional) ─────────────────────────────────────────
 echo ""
-echo "── Step 3: restart traffic-light green bridge ──"
-pkill -f traffic_light_green_bridge.py 2>/dev/null || true
-sleep 1
-LOG="/home/aw/autoware_data/traffic_light_green_bridge.log"
-nohup python3 /home/aw/autoware_data/traffic_light_green_bridge.py \
-  /home/aw/maps/nishishinjuku_autoware_map/lanelet2_map.osm \
-  >> "${LOG}" 2>&1 &
-echo "  Bridge PID=$!, log: ${LOG}"
-sleep 3
-tail -1 "${LOG}" | sed 's/^/    /'
+echo "── Step 3: traffic-light green bridge (optional) ──"
+BRIDGE_PY="/home/aw/autoware_data/traffic_light_green_bridge.py"
+if [[ -f "${BRIDGE_PY}" ]]; then
+  pkill -f traffic_light_green_bridge.py 2>/dev/null || true
+  sleep 1
+  LOG="/home/aw/autoware_data/traffic_light_green_bridge.log"
+  nohup python3 "${BRIDGE_PY}" \
+    /home/aw/maps/nishishinjuku_autoware_map/lanelet2_map.osm \
+    >> "${LOG}" 2>&1 &
+  echo "  Bridge PID=$!, log: ${LOG}"
+  sleep 3
+  tail -1 "${LOG}" | sed 's/^/    /'
+else
+  echo "  NOTE: ${BRIDGE_PY} missing — skipping. Car may stop at red lights."
+fi
 
 # ── 4. Clear route + localize + set route ───────────────────────
 echo ""

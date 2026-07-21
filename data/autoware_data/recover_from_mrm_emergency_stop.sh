@@ -18,8 +18,15 @@ echo " Recover from MRM emergency_stop (localization reset)"
 echo " $(date -Iseconds)"
 echo "============================================================"
 
-if ! pgrep -f traffic_light_green_bridge.py >/dev/null 2>&1; then
-  bash /home/aw/autoware_data/run_traffic_light_bridge_inside_container.sh
+# Optional lab helper — not required for localization / MRM recovery.
+BRIDGE_PY="/home/aw/autoware_data/traffic_light_green_bridge.py"
+if pgrep -f traffic_light_green_bridge.py >/dev/null 2>&1; then
+  echo "Traffic-light green bridge already running (optional)."
+elif [[ -f "${BRIDGE_PY}" ]]; then
+  bash /home/aw/autoware_data/run_traffic_light_bridge_inside_container.sh || \
+    echo "WARNING: failed to start traffic-light bridge — continuing without it"
+else
+  echo "NOTE: no traffic-light green bridge (optional). Car may stop at red lights."
 fi
 
 echo ""

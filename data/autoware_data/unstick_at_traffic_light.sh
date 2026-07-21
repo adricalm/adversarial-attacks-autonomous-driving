@@ -13,9 +13,15 @@ export ROS_DOMAIN_ID=26
 
 ROUTE_JSON="${1:-/home/aw/autoware_data/route_candidates.json}"
 
-echo "==> Ensure traffic-light bridge is running"
-if ! pgrep -f traffic_light_green_bridge.py >/dev/null 2>&1; then
-  bash /home/aw/autoware_data/run_traffic_light_bridge_inside_container.sh
+BRIDGE_PY="/home/aw/autoware_data/traffic_light_green_bridge.py"
+if pgrep -f traffic_light_green_bridge.py >/dev/null 2>&1; then
+  echo "==> Traffic-light bridge already running"
+elif [[ -f "${BRIDGE_PY}" ]]; then
+  echo "==> Starting traffic-light bridge"
+  bash /home/aw/autoware_data/run_traffic_light_bridge_inside_container.sh || \
+    echo "WARNING: bridge failed to start — continuing"
+else
+  echo "==> NOTE: no traffic-light green bridge — red lights may still block motion"
 fi
 
 echo "==> Stop (not change_to_manual — that service does not exist)"
