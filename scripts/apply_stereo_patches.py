@@ -12,15 +12,15 @@ Typical workflow (frame-by-frame)
      python3 scripts/apply_stereo_patches.py preview \\
        --frame 105 --center-x 921 --center-y 420 --size 80 --depth 12.4
 
-   Open dsgn/datasets/adria/dsgn_awsim/patch_previews/000105_compare.png. Tweak coords and re-run;
+   Open dsgn/datasets/adria/preview/000105_compare.png. Tweak coords and re-run;
    the CSV row for that frame is overwritten each time.
 
 2. Repeat for each frame, then build the full dataset once:
 
      python3 scripts/apply_stereo_patches.py apply \\
        --source dsgn/datasets/arka/dsgn_awsim/testing_offline \\
-       --output dsgn/datasets/adria/dsgn_awsim/testing_offline_patched \\
-       --config dsgn/datasets/adria/dsgn_awsim/patches_100_200.csv \\
+       --output dsgn/datasets/adria/testing_offline_patched \\
+       --config dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv \\
        --frames 100-200
 
 3. Run DSGN inference on --output, then copy awsim_output_* into dsgn_offline/resource/.
@@ -287,26 +287,20 @@ def draw_patch_box(img: Image.Image, center_x: float, center_y: float, size: int
 
 
 def make_compare_sheet(
-    left_orig: Image.Image,
     left_pat: Image.Image,
-    right_orig: Image.Image,
     right_pat: Image.Image,
     title: str,
 ) -> Image.Image:
-    """2x2 grid: top = originals (left | right), bottom = patched (left | right)."""
-    w, h = left_orig.size
+    """Side-by-side: left patched | right patched."""
+    w, h = left_pat.size
     label_h = 28
-    sheet = Image.new("RGB", (w * 2, h * 2 + label_h * 2), (32, 32, 32))
-    sheet.paste(left_orig, (0, label_h))
-    sheet.paste(right_orig, (w, label_h))
-    sheet.paste(left_pat, (0, h + label_h * 2))
-    sheet.paste(right_pat, (w, h + label_h * 2))
+    sheet = Image.new("RGB", (w * 2, h + label_h * 2), (32, 32, 32))
+    sheet.paste(left_pat, (0, label_h))
+    sheet.paste(right_pat, (w, label_h))
     draw = ImageDraw.Draw(sheet)
-    draw.text((8, 6), "left original", fill=(220, 220, 220))
-    draw.text((w + 8, 6), "right original", fill=(220, 220, 220))
-    draw.text((8, h + label_h + 6), "left patched", fill=(220, 220, 220))
-    draw.text((w + 8, h + label_h + 6), "right patched", fill=(220, 220, 220))
-    draw.text((8, h * 2 + label_h * 2 - 22), title, fill=(180, 255, 180))
+    draw.text((8, 6), "left patched", fill=(220, 220, 220))
+    draw.text((w + 8, 6), "right patched", fill=(220, 220, 220))
+    draw.text((8, h + label_h + 6), title, fill=(180, 255, 180))
     return sheet
 
 
@@ -479,17 +473,12 @@ def cmd_preview(args: argparse.Namespace) -> int:
         left_orig, right_orig, calib_path, center_x, center_y, size, depth_m, seed
     )
 
-    left_orig.save(out_dir / f"{frame}_left_orig.png")
-    right_orig.save(out_dir / f"{frame}_right_orig.png")
-    left_pat.save(out_dir / f"{frame}_left_patched.png")
-    right_pat.save(out_dir / f"{frame}_right_patched.png")
-
     title = (
         f"{frame}  left=({center_x:.0f},{center_y:.0f})  "
         f"right=({right_cx:.0f},{center_y:.0f})  "
         f"size={size}  depth={depth_m:.1f}m  disp={disp:.1f}px"
     )
-    compare = make_compare_sheet(left_orig, left_pat, right_orig, right_pat, title)
+    compare = make_compare_sheet(left_pat, right_pat, title)
     compare_path = out_dir / f"{frame}_compare.png"
     compare.save(compare_path)
 
@@ -598,8 +587,8 @@ def build_parser() -> argparse.ArgumentParser:
     preview_p.add_argument("--seed", type=int, default=None)
     preview_p.add_argument(
         "--config",
-        default="dsgn/datasets/adria/dsgn_awsim/patches_100_200.csv",
-        help="patch CSV updated on each preview (default: patches_100_200.csv)",
+        default="dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv",
+        help="patch CSV updated on each preview (default: testing_offline_patched/patches_100_200.csv)",
     )
     preview_p.add_argument(
         "--no-save-csv",
@@ -608,7 +597,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     preview_p.add_argument(
         "--output",
-        default="dsgn/datasets/adria/dsgn_awsim/patch_previews",
+        default="dsgn/datasets/adria/preview",
         help="where to write preview PNGs",
     )
     preview_p.add_argument(
