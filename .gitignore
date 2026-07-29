@@ -5,6 +5,9 @@ dsgn/detections/
 dsgn/training_logs/
 !dsgn/datasets/adria/.gitkeep
 
+# Data
+multimedia/
+
 # Runtime output 
 data/autoware_data/*.log
 data/autoware_data/*_result.json
