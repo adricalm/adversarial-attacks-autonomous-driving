@@ -11,10 +11,9 @@ See also: [README DSGN overlay section](../README.md#dsgn-offline-overlay-option
 
 Before building or running `dsgn_offline`:
 
-- [x] Autoware container running (`autoware_full_test`) with **canonical launch** from README (NDT bind-mount + `launch_rviz_adaptors:=true`)
-- [x] **Extra volume mounts** on `docker run` (see Step 1)
+- [x] Autoware container running (`autoware_full_test`) with **canonical launch** from README (includes `src/` + `scripts/` mounts, NDT bind-mount, `launch_rviz_adaptors:=true`)
 - [x] AWSIM running, `/clock` has one publisher
-- [ ] Localization initialized, route set, traffic-light bridge running
+- [ ] Localization initialized, route set, traffic-light bridge running (`bash /home/aw/scripts/run_traffic_light_bridge_inside_container.sh`)
 - [ ] Ego driving or ready to engage (`/autoware/state` → 5)
 
 **Synchronization note:** `dsgn_offline` picks the nearest row in `path.txt` from current `/localization/pose_with_covariance`. Detections align only when ego `(x, y)` is close to Arka's recorded MGRS trajectory (~81377, 49917). Compare while driving:
@@ -27,53 +26,17 @@ head -3 /home/aw/ros2_ws/src/dsgn_offline/resource/path.txt
 
 ---
 
-## 1. Restart Autoware with overlay mounts — **host**
+## 1. Restart Autoware — **host**
 
-Add these mounts to the canonical `docker run` (in addition to existing map / autoware_data / NDT mounts):
+Use the **canonical** `docker run` from the README (already mounts `src/`, `scripts/`, and `logs/`).
 
-```bash
--v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
--v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
--v "$HOME/summer26/data/bags:/home/aw/bags" \
-```
-
-Full example (stop old container first):
+Optional for bag recording (see [`ROSBAG_AB_TESTING.md`](ROSBAG_AB_TESTING.md)):
 
 ```bash
-sudo docker run --rm -d \
-  --name autoware_full_test \
-  --device nvidia.com/gpu=all \
-  --network host \
-  -e HOME=/home/aw \
-  -e ROS_DOMAIN_ID=26 \
-  -v "$HOME/summer26/data/maps:/home/aw/maps:ro" \
-  -v "$HOME/summer26/data/autoware_data:/home/aw/autoware_data" \
-  -v "$HOME/summer26/data/autoware_data/ndt_scan_matcher.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" \
-  -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
-  -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
-  -v "$HOME/summer26/data/bags:/home/aw/bags" \
-  --entrypoint /bin/bash \
-  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
-  -lc '
-    source /opt/ros/humble/setup.bash
-    source /opt/autoware/setup.bash
-    unset CYCLONEDDS_URI
-    export ROS_DOMAIN_ID=26
-    MAP=/home/aw/maps/nishishinjuku_autoware_map
-    DATA=/home/aw/autoware_data/ml_models
-    ros2 launch autoware_launch e2e_simulator.launch.xml \
-      vehicle_model:=awsim_labs_vehicle \
-      sensor_model:=awsim_labs_sensor_kit \
-      map_path:="$MAP" \
-      data_path:="$DATA" \
-      launch_vehicle_interface:=true \
-      rviz:=false \
-      rviz_respawn:=false \
-      launch_rviz_adaptors:=true
-  '
+-v "$HOME/summer26/data/bags:/home/aw/bags"
 ```
 
-**Why:** `dsgn_offline` must be built inside the image (needs `autoware_perception_msgs`). Mounting `src/` exposes the package; mounting `scripts/` exposes build/run helpers.
+**Why:** `dsgn_offline` must be built inside the image (needs `autoware_perception_msgs`). `src/` exposes the package; `scripts/` exposes build/run helpers.
 
 ---
 

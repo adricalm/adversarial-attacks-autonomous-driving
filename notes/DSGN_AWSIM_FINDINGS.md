@@ -9,7 +9,7 @@ Related: [`DSGN_PYTORCH_VERSIONING.md`](DSGN_PYTORCH_VERSIONING.md), [`DSGN_OFFL
 
 1. **Hypothesis: PyTorch version** — Official DSGN authors reported a large eval drop when moving past PT 1.3. We blamed PT 2.6 on the L40S for “nonsense” detections (Arka `finetune_60` and early AWSIM runs). That **is still true for Arka’s PT 1.3 AWSIM checkpoint** on this host, but it was **not** the main reason official KITTI `finetune_48` looked broken on AWSIM.
 
-2. **Detour: DSGN++ (DSGN2)** — Tried for newer deps / GPU-friendly stack. Weak on AWSIM (KITTI-trained). On a KITTI subset it ran but missed many cars. Original DSGN looked better on the same subset (light check, not a full DSGN2 bake-off). Stayed on **`external/DSGN_custom`** for continuity with Autoware / `dsgn_offline`.
+2. **Detour: DSGN++ (DSGN2)** — Tried for newer deps / GPU-friendly stack. Weak on AWSIM (KITTI-trained). On a KITTI subset it ran but missed many cars. Original DSGN looked better on the same subset (light check, not a full DSGN2 bake-off). Stayed on **`external/DSGN_custom`** for continuity with Autoware / `dsgn_offline`. Scripts under `scripts/dsgn2_*` are **kept for now**; removing them is future cleanup.
 
 3. **Real AWSIM fix: geometry + config** — Once half-res config matched the loader, **official `finetune_48` produced coherent boxes on AWSIM without finetuning**. Remaining pain: **false positives**.
 
@@ -85,7 +85,7 @@ DSGN training **always** expects KITTI via `Object3d`. Raw Arka-format labels �
 |----------|--------|
 | Ship **`finetune_48`** + half-res config + score thresh | Still the safe default until a full adapt beats it |
 | **`MODE=det_head`** on converted labels | **Tried** — see [`DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md); debug viz **not great** |
-| **Full-model** on converted labels (Arka-style) | Next: train entire net from `finetune_48` via `dsgn_train.sh` (or `MODE=gentle` for lower LR) |
+| **Full-model** on converted labels (Arka-style) | Next: train entire net from `finetune_48` via `dsgn_train.sh` |
 | Arka **`finetune_60`** on this host | Optional A/B via precomputed dumps; PT 2.6 re-inference unfaithful |
 
 Always: converted `label_2` under `training_kitti_labels`, `FORCE_TARGETS=1` when labels change, viz with **`--box-convention kitti`**.
@@ -103,7 +103,7 @@ SAVEMODEL=~/summer26/dsgn/checkpoints/adria/kitti48_awsim_full_kitti_labels \
 bash ~/summer26/scripts/dsgn_train.sh
 ```
 
-Safer alternative if that overfits/forgets: `MODE=gentle EPOCHS=60 SAVE_EVERY=5 ... bash scripts/dsgn_finetune_awsim.sh` (full net, low LR).
+(`dsgn_finetune_awsim.sh` with `MODE=gentle|det_head` no longer exists; historical det_head recipe is in [`DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md).)
 
 ---
 

@@ -12,8 +12,8 @@ Start from official KITTI `finetune_48` (coherent on AWSIM after half-res config
 
 ## How it was trained
 
-**Script:** `scripts/dsgn_finetune_awsim.sh`  
-**Mode:** `MODE=det_head` — freeze stereo `feature_extraction,dres0,classif1`; train RPN / bbox heads only.
+**Script (removed):** `scripts/dsgn_finetune_awsim.sh` with `MODE=det_head` — freeze stereo `feature_extraction,dres0,classif1`; train RPN / bbox heads only.  
+**Current train entrypoint:** `scripts/dsgn_train.sh` (full-model only; no `MODE=`).
 
 | Setting | Value |
 |---------|--------|
@@ -25,8 +25,10 @@ Start from official KITTI `finetune_48` (coherent on AWSIM after half-res config
 | LR | `BASE_LR=2e-4`, `MIN_LR=2e-5`, `LR_SCALE=40`, `--no_warmup` |
 | Schedule | 60 epochs, save every 5, batch 1, `FORCE_TARGETS=1` |
 
-Authoritative recipe:  
+Authoritative recipe (as run):  
 `dsgn/checkpoints/adria/kitti48_awsim_adapt_det_head_kitti_labels/finetune_recipe.txt`
+
+Historical command (script no longer in tree):
 
 ```bash
 MODE=det_head EPOCHS=60 SAVE_EVERY=5 LR_SCALE=40 FORCE_TARGETS=1 \
@@ -34,7 +36,7 @@ DATA_PATH=~/summer26/dsgn/datasets/adria/training_kitti_labels \
 SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/trainval.txt \
 LOADMODEL=~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar \
 SAVEMODEL=~/summer26/dsgn/checkpoints/adria/kitti48_awsim_adapt_det_head_kitti_labels \
-bash ~/summer26/scripts/dsgn_finetune_awsim.sh
+bash ~/summer26/scripts/dsgn_finetune_awsim.sh   # removed — see finetune_recipe.txt
 ```
 
 ## Artifacts
