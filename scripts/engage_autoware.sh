@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Host script: engage autonomous mode and verify vehicle motion inside Autoware Docker container.
+# Host script: engage autonomous mode and verify vehicle motion inside Autoware Docker.
+# Requires scripts mount: -v "$HOME/summer26/scripts:/home/aw/scripts:ro"
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${HOME}/summer26/logs"
 RESULT_JSON="${HOME}/summer26/data/autoware_data/engage_result.json"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -29,11 +29,6 @@ mkdir -p "${LOG_DIR}"
   echo "Container: ${CONTAINER}"
   echo "Timestamp: ${TIMESTAMP}"
 
-  echo "==> Copying engage scripts into mounted autoware_data volume"
-  cp "${SCRIPT_DIR}/engage_autoware.py" "${HOME}/summer26/data/autoware_data/engage_autoware.py"
-  cp "${SCRIPT_DIR}/engage_capture_inside_container.sh" "${HOME}/summer26/data/autoware_data/run_engage_capture.sh"
-  chmod +x "${HOME}/summer26/data/autoware_data/run_engage_capture.sh"
-
   echo "==> Step 1-4: verify trajectory, engage, check control + velocity (inside Docker)"
   sudo docker exec "${CONTAINER}" bash -lc '
     source /opt/ros/humble/setup.bash
@@ -51,7 +46,7 @@ mkdir -p "${LOG_DIR}"
     ros2 topic echo --once /planning/scenario_planning/trajectory \
       | grep -E "longitudinal_velocity_mps" | head -20 || true
 
-    python3 /home/aw/autoware_data/engage_autoware.py
+    python3 /home/aw/scripts/engage_autoware.py
     exit_code=$?
 
     echo "--- /autoware/state (after) ---"

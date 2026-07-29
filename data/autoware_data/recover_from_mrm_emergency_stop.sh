@@ -19,11 +19,11 @@ echo " $(date -Iseconds)"
 echo "============================================================"
 
 # Optional lab helper — not required for localization / MRM recovery.
-BRIDGE_PY="/home/aw/autoware_data/traffic_light_green_bridge.py"
+BRIDGE_PY="/home/aw/scripts/traffic_light_green_bridge.py"
 if pgrep -f traffic_light_green_bridge.py >/dev/null 2>&1; then
   echo "Traffic-light green bridge already running (optional)."
 elif [[ -f "${BRIDGE_PY}" ]]; then
-  bash /home/aw/autoware_data/run_traffic_light_bridge_inside_container.sh || \
+  bash /home/aw/scripts/run_traffic_light_bridge_inside_container.sh || \
     echo "WARNING: failed to start traffic-light bridge — continuing without it"
 else
   echo "NOTE: no traffic-light green bridge (optional). Car may stop at red lights."
@@ -43,7 +43,7 @@ sleep 1
 
 echo ""
 echo "── Step 3: re-localize + set route (resets EKF / NDT pose pipeline) ──"
-python3 /home/aw/autoware_data/apply_route_from_osm.py "${ROUTE_JSON}" || {
+python3 /home/aw/scripts/apply_route_from_osm.py "${ROUTE_JSON}" || {
   echo "WARNING: apply_route exited non-zero — continuing"
 }
 sleep 5

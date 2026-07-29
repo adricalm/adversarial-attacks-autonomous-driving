@@ -11,12 +11,12 @@ unset CYCLONEDDS_URI
 export ROS_DOMAIN_ID=26
 
 MAP_PATH="${1:-/home/aw/maps/nishishinjuku_autoware_map/lanelet2_map.osm}"
-SCRIPT="/home/aw/autoware_data/traffic_light_green_bridge.py"
+SCRIPT="/home/aw/scripts/traffic_light_green_bridge.py"
 LOG="/home/aw/autoware_data/traffic_light_green_bridge.log"
 ARBITER_NODE="/perception/traffic_light_recognition/traffic_light_arbiter"
 
 if [[ ! -f "${SCRIPT}" ]]; then
-  echo "Missing ${SCRIPT}. Copy from ~/summer26/scripts on the host first." >&2
+  echo "Missing ${SCRIPT}. Mount scripts: -v \"\$HOME/summer26/scripts:/home/aw/scripts:ro\"" >&2
   exit 1
 fi
 

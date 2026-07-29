@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Host wrapper: copy bridge script into mounted volume and run inside Autoware Docker.
+# Host wrapper: run traffic-light green bridge inside Autoware Docker.
+# Requires scripts mount: -v "$HOME/summer26/scripts:/home/aw/scripts:ro"
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAP_PATH="${MAP_PATH:-/home/aw/maps/nishishinjuku_autoware_map/lanelet2_map.osm}"
 LOG_DIR="${HOME}/summer26/logs"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -29,10 +29,6 @@ echo "Container: ${CONTAINER}"
 echo "Timestamp: ${TIMESTAMP}"
 echo "Log: ${LOG_FILE}"
 
-echo "==> Copying bridge script into mounted autoware_data volume"
-cp "${SCRIPT_DIR}/traffic_light_green_bridge.py" "${HOME}/summer26/data/autoware_data/traffic_light_green_bridge.py"
-chmod +x "${HOME}/summer26/data/autoware_data/traffic_light_green_bridge.py"
-
 echo "==> Diagnosis (before bridge)"
 {
   echo "=== ros2 topic types ==="
@@ -50,7 +46,7 @@ echo "==> Diagnosis (before bridge)"
   '
 } | tee "${LOG_FILE}"
 
-echo "==> Starting bridge in background inside Docker (Ctrl+C in that shell stops it)"
+echo "==> Starting bridge in background inside Docker"
 echo "    To stop later: sudo docker exec ${CONTAINER} pkill -f traffic_light_green_bridge.py"
 
 sudo docker exec -d "${CONTAINER}" bash -lc "
@@ -58,7 +54,7 @@ sudo docker exec -d "${CONTAINER}" bash -lc "
   source /opt/autoware/setup.bash
   unset CYCLONEDDS_URI
   export ROS_DOMAIN_ID=26
-  nohup python3 /home/aw/autoware_data/traffic_light_green_bridge.py '${MAP_PATH}' \
+  nohup python3 /home/aw/scripts/traffic_light_green_bridge.py '${MAP_PATH}' \
     >> /home/aw/autoware_data/traffic_light_green_bridge.log 2>&1 &
 "
 

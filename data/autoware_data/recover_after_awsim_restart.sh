@@ -61,7 +61,7 @@ fi
 # ── 3. Bridge (optional) ─────────────────────────────────────────
 echo ""
 echo "── Step 3: traffic-light green bridge (optional) ──"
-BRIDGE_PY="/home/aw/autoware_data/traffic_light_green_bridge.py"
+BRIDGE_PY="/home/aw/scripts/traffic_light_green_bridge.py"
 if [[ -f "${BRIDGE_PY}" ]]; then
   pkill -f traffic_light_green_bridge.py 2>/dev/null || true
   sleep 1
@@ -82,7 +82,7 @@ echo "── Step 4: clear route, localize, set route ──"
 timeout 10 ros2 service call /api/routing/clear_route \
   autoware_adapi_v1_msgs/srv/ClearRoute "{}" 2>/dev/null || true
 sleep 1
-python3 /home/aw/autoware_data/apply_route_from_osm.py "${ROUTE_JSON}" || {
+python3 /home/aw/scripts/apply_route_from_osm.py "${ROUTE_JSON}" || {
   echo "  WARNING: apply_route exited non-zero — continuing"
 }
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# In-container capture helper (copied to autoware_data volume by engage_autoware.sh).
+# In-container capture helper. Prefer: bash /home/aw/scripts/engage_capture_inside_container.sh
+# Requires scripts mount: -v "$HOME/summer26/scripts:/home/aw/scripts:ro"
 set -u
 
 LOG=/home/aw/autoware_data/engage_capture.log
@@ -24,7 +25,7 @@ exit_code=1
   ros2 topic echo --once /planning/scenario_planning/trajectory \
     | grep -E "longitudinal_velocity_mps" | head -20 || true
 
-  python3 /home/aw/autoware_data/engage_autoware.py
+  python3 /home/aw/scripts/engage_autoware.py
   exit_code=$?
 
   echo "--- /autoware/state (after) ---"
