@@ -6,7 +6,7 @@
 # AWSIM RVIZNPCSpawner destroys NPCs after ~30 s (Unity "Despawn time").
 # With SHOW_CARS=true this script keeps re-spawning until Ctrl+C.
 SHOW_CARS=true   # false = do nothing
-RESPAWN_SEC=27   # must be < AWSIM despawnTime (default 30)
+RESPAWN_SEC=26   # must be < AWSIM despawnTime (default 30)
 
 set -euo pipefail
 set +u

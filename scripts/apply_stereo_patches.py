@@ -23,6 +23,15 @@ Typical workflow (frame-by-frame)
        --config dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv \\
        --frames 100-200
 
+   Static (non-noise) patch texture:
+
+     python3 scripts/apply_stereo_patches.py apply \\
+       --source dsgn/datasets/arka/dsgn_awsim/testing_offline \\
+       --output dsgn/datasets/adria/testing_offline_patched_optimized \\
+       --config dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv \\
+       --patch-image multimedia/ChatGPT-patch.png \\
+       --copy-calib
+
 3. Run DSGN inference on --output, then copy awsim_output_* into dsgn_offline/resource/.
 
 Config CSV columns (header required):
@@ -142,6 +151,13 @@ def make_noise_patch(size: int, seed: int) -> Image.Image:
     return gray.convert("RGB")
 
 
+def make_patch(size: int, seed: int, static_patch: Image.Image | None = None) -> Image.Image:
+    """Square patch of side `size`: static image resized, or B&W noise."""
+    if static_patch is None:
+        return make_noise_patch(size, seed)
+    return static_patch.resize((size, size), Image.Resampling.LANCZOS).convert("RGB")
+
+
 def paste_patch(base: Image.Image, patch: Image.Image, center_x: float, center_y: float) -> Image.Image:
     """Paste patch centered at (center_x, center_y); clip at image bounds."""
     out = base.copy()
@@ -252,12 +268,13 @@ def patch_stereo_pair(
     size: int,
     depth_m: float,
     seed: int,
+    static_patch: Image.Image | None = None,
 ) -> tuple[Image.Image, Image.Image, float, float]:
     f_u, baseline = read_calib(calib_path)
     disp = disparity_px(f_u, baseline, depth_m)
     right_cx = center_x - disp
     right_cy = center_y
-    patch = make_noise_patch(size, seed)
+    patch = make_patch(size, seed, static_patch)
     left_out = paste_patch(left_img, patch, center_x, center_y)
     right_out = paste_patch(right_img, patch, right_cx, right_cy)
     return left_out, right_out, right_cx, disp
@@ -383,6 +400,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
             shutil.rmtree(out_calib)
         shutil.copytree(src_calib, out_calib)
 
+    static_patch: Image.Image | None = None
+    if getattr(args, "patch_image", None):
+        patch_path = Path(args.patch_image)
+        if not patch_path.is_file():
+            print(f"error: patch image not found: {patch_path}", file=sys.stderr)
+            return 1
+        static_patch = Image.open(patch_path).convert("RGB")
+        print(f"Using static patch: {patch_path}")
+
     all_frames = list_frame_ids(src_left)
     if args.frames:
         patch_only = set(parse_frame_range(args.frames))
@@ -421,6 +447,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 spec.size,
                 depth_m,
                 spec.seed,
+                static_patch,
             )
             left_img.save(left_out)
             right_img.save(right_out)
@@ -467,10 +494,26 @@ def cmd_preview(args: argparse.Namespace) -> int:
         source, frame, center_x, center_y, args.depth, args.default_depth, args.use_depth_maps
     )
 
+    static_patch: Image.Image | None = None
+    if getattr(args, "patch_image", None):
+        patch_path = Path(args.patch_image)
+        if not patch_path.is_file():
+            print(f"error: patch image not found: {patch_path}", file=sys.stderr)
+            return 1
+        static_patch = Image.open(patch_path).convert("RGB")
+
     left_orig = Image.open(left_path).convert("RGB")
     right_orig = Image.open(right_path).convert("RGB")
     left_pat, right_pat, right_cx, disp = patch_stereo_pair(
-        left_orig, right_orig, calib_path, center_x, center_y, size, depth_m, seed
+        left_orig,
+        right_orig,
+        calib_path,
+        center_x,
+        center_y,
+        size,
+        depth_m,
+        seed,
+        static_patch,
     )
 
     title = (
@@ -561,6 +604,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="sample depth_m from source/depth/*.npy when CSV depth_m is empty",
     )
     apply_p.add_argument("--copy-calib", action="store_true", help="refresh calib/ from source")
+    apply_p.add_argument(
+        "--patch-image",
+        default=None,
+        help="static patch PNG/JPG (resized per-frame to CSV size); default: random B&W noise",
+    )
     apply_p.add_argument("-v", "--verbose", action="store_true")
     apply_p.set_defaults(func=cmd_apply)
 
@@ -609,6 +657,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--use-depth-maps",
         action="store_true",
         help="sample depth from source/depth/*.npy when --depth omitted",
+    )
+    preview_p.add_argument(
+        "--patch-image",
+        default=None,
+        help="static patch PNG/JPG (resized to --size); default: random B&W noise",
     )
     preview_p.add_argument(
         "--open",

@@ -9,6 +9,8 @@
 # Usage:
 #   bash scripts/dsgn_run_inference.sh
 #   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
+#   bash scripts/dsgn_run_inference.sh --debug   # optional extra args to test_no_eval.py
+# GPU timing bench (separate script): bash scripts/dsgn_bench_inference.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -56,7 +58,8 @@ python test_no_eval.py \
   --loadmodel "${LOADMODEL}" \
   --btest "${BATCH}" \
   --devices "${GPU}" \
-  --tag "${TAG}"
+  --tag "${TAG}" \
+  "$@"
 
 # test_no_eval.py writes next to the checkpoint; move to dsgn/detections/adria/.
 RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}" # Arka's output, which we'll overwrite.
