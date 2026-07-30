@@ -6,7 +6,7 @@
 # AWSIM RVIZNPCSpawner destroys NPCs after ~30 s (Unity "Despawn time").
 # With SHOW_CARS=true this script keeps re-spawning until Ctrl+C.
 SHOW_CARS=true   # false = do nothing
-RESPAWN_SEC=26   # must be < AWSIM despawnTime (default 30)
+RESPAWN_SEC=27   # must be < AWSIM despawnTime (default 30)
 
 set -euo pipefail
 set +u
@@ -46,8 +46,8 @@ spawn() {
 
 echo "SHOW_CARS=true — respawning A+B every ${RESPAWN_SEC}s (Ctrl+C to stop)."
 while true; do
-  spawn 81446.2 49967.1 1   # A (+5) # 81446.2 49967.1 1
-  spawn 81451.5 49976.2 2   # B
+  spawn 81441.3 49963.7 1   # A front  (before, with the Arka trick was: (+5) # 81446.2 49967.1 1
+  spawn 81451.1 49975 2   # B left  
   echo "  spawned $(date -Iseconds) — next in ${RESPAWN_SEC}s"
   sleep "${RESPAWN_SEC}"
 done
