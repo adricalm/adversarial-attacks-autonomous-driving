@@ -151,11 +151,31 @@ def make_noise_patch(size: int, seed: int) -> Image.Image:
     return gray.convert("RGB")
 
 
-def make_patch(size: int, seed: int, static_patch: Image.Image | None = None) -> Image.Image:
-    """Square patch of side `size`: static image resized, or B&W noise."""
+RESAMPLE_FILTERS = {
+    "lanczos": Image.Resampling.LANCZOS,
+    "bilinear": Image.Resampling.BILINEAR,
+    "bicubic": Image.Resampling.BICUBIC,
+    "nearest": Image.Resampling.NEAREST,
+    "area": Image.Resampling.BOX,
+}
+
+
+def make_patch(
+    size: int,
+    seed: int,
+    static_patch: Image.Image | None = None,
+    resample: str = "lanczos",
+) -> Image.Image:
+    """Square patch of side `size`: static image resized, or B&W noise.
+
+    `resample` must match what the optimizer rendered with, otherwise the
+    deployed patch is not the one that was trained -- an optimized patch is
+    saturated high-frequency content, which is exactly where filters disagree
+    most. 'bilinear' pairs with optimize_patch's antialiased bilinear.
+    """
     if static_patch is None:
         return make_noise_patch(size, seed)
-    return static_patch.resize((size, size), Image.Resampling.LANCZOS).convert("RGB")
+    return static_patch.resize((size, size), RESAMPLE_FILTERS[resample]).convert("RGB")
 
 
 def paste_patch(base: Image.Image, patch: Image.Image, center_x: float, center_y: float) -> Image.Image:
@@ -269,12 +289,13 @@ def patch_stereo_pair(
     depth_m: float,
     seed: int,
     static_patch: Image.Image | None = None,
+    resample: str = "lanczos",
 ) -> tuple[Image.Image, Image.Image, float, float]:
     f_u, baseline = read_calib(calib_path)
     disp = disparity_px(f_u, baseline, depth_m)
     right_cx = center_x - disp
     right_cy = center_y
-    patch = make_patch(size, seed, static_patch)
+    patch = make_patch(size, seed, static_patch, resample=resample)
     left_out = paste_patch(left_img, patch, center_x, center_y)
     right_out = paste_patch(right_img, patch, right_cx, right_cy)
     return left_out, right_out, right_cx, disp
@@ -448,6 +469,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 depth_m,
                 spec.seed,
                 static_patch,
+                resample=args.patch_resample,
             )
             left_img.save(left_out)
             right_img.save(right_out)
@@ -514,6 +536,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
         depth_m,
         seed,
         static_patch,
+        resample=args.patch_resample,
     )
 
     title = (
@@ -609,6 +632,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="static patch PNG/JPG (resized per-frame to CSV size); default: random B&W noise",
     )
+    apply_p.add_argument(
+        "--patch-resample",
+        choices=sorted(RESAMPLE_FILTERS),
+        default="bilinear",
+        help="filter used to resize --patch-image. Default matches the "
+        "optimizer's antialiased bilinear to within 1/255; the earlier "
+        "'lanczos' behaviour differed from training by up to 150/255",
+    )
     apply_p.add_argument("-v", "--verbose", action="store_true")
     apply_p.set_defaults(func=cmd_apply)
 
@@ -662,6 +693,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--patch-image",
         default=None,
         help="static patch PNG/JPG (resized to --size); default: random B&W noise",
+    )
+    preview_p.add_argument(
+        "--patch-resample",
+        choices=sorted(RESAMPLE_FILTERS),
+        default="bilinear",
+        help="filter used to resize --patch-image. Default matches the "
+        "optimizer's antialiased bilinear to within 1/255; the earlier "
+        "'lanczos' behaviour differed from training by up to 150/255",
     )
     preview_p.add_argument(
         "--open",
