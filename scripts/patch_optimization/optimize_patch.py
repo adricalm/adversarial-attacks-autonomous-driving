@@ -33,7 +33,7 @@ latest-best pointer. Stdout is teed to out/run_TIMESTAMP.log.
 Example
 -------
   external/DSGN_custom/.venv/bin/python scripts/patch_optimization/optimize_patch.py \\
-    --images dsgn/datasets/arka/dsgn_awsim/training \\
+    --images dsgn/datasets/adria/training_kitti_labels \\
     --csv dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \\
     --cfg dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py \\
     --loadmodel dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar \\
@@ -1005,7 +1005,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--images",
         type=Path,
-        default=ROOT / "dsgn/datasets/arka/dsgn_awsim/training",
+        default=ROOT / "dsgn/datasets/adria/training_kitti_labels",
         help="Clean KITTI-layout dataset (image_2, image_3, calib)",
     )
     p.add_argument(

@@ -3,7 +3,7 @@
 Usage:
     python scripts/patch_optimization/visualize_patch.py \
         --run  dsgn/datasets/adria/2.training_patch_optimization/optimize_logit_face050 \
-        --images dsgn/datasets/arka/dsgn_awsim/training \
+        --images dsgn/datasets/adria/training_kitti_labels \
         --csv   dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \
         --out   /tmp/patch_vis
 
@@ -199,7 +199,7 @@ def pick_frames(rows, n=12):
 
 def _right_x0_for(row, rect):
     calib_path = Path(
-        "dsgn/datasets/arka/dsgn_awsim/training/calib"
+        "dsgn/datasets/adria/training_kitti_labels/calib"
     ) / f"{row['frame']}.txt"
     try:
         f_u, baseline = load_calib(calib_path)

@@ -15,7 +15,7 @@ Usage
 -----
     python scripts/patch_optimization/eval_patch.py \\
         --run  dsgn/datasets/adria/2.training_patch_optimization/optimize_logit_face050 \\
-        --images dsgn/datasets/arka/dsgn_awsim/training \\
+        --images dsgn/datasets/adria/training_kitti_labels \\
         --csv   dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \\
         --cfg   dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py \\
         --loadmodel dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar
@@ -168,9 +168,12 @@ def main():
     ap.add_argument("--run", type=Path, required=True,
                     help="optimize_patch.py output dir (patch_best.pt lives here)")
     ap.add_argument("--images", type=Path,
-                    default=Path("dsgn/datasets/arka/dsgn_awsim/training"))
+                    default=Path("dsgn/datasets/adria/training_kitti_labels"))
     ap.add_argument("--csv", type=Path,
                     default=Path("dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv"))
+    ap.add_argument("--val-csv", type=Path, default=None,
+                    help="Explicit held-out validation CSV, matching optimize_patch.py. "
+                         "When set, --csv is entirely train and no frame split is made.")
     ap.add_argument("--cfg", type=Path,
                     default=Path("dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py"))
     ap.add_argument("--loadmodel", type=Path,
@@ -215,26 +218,45 @@ def main():
         resample=args.resample, quantize=args.quantize,
     )
 
-    # Build the clean score lookup from CSV (computed at localization time).
+    # Build the clean score lookup from CSV(s), computed at localization time.
     all_frames = load_csv(args.csv)
     clean_score_map = {s.frame: 0.0 for s in all_frames}
-    with args.csv.open() as f:
-        for row in csv.DictReader(f):
-            frame = f"{int(row['frame']):06d}"
-            clean_score_map[frame] = float(row.get("score") or 0.0)
+    score_csvs = [args.csv]
+    if args.val_csv is not None:
+        score_csvs.append(args.val_csv)
+    for score_csv in score_csvs:
+        with score_csv.open() as f:
+            for row in csv.DictReader(f):
+                frame = f"{int(row['frame']):06d}"
+                clean_score_map[frame] = float(row.get("score") or 0.0)
 
-    # Reproduce training split with same params.
+    # Reproduce either the explicit event split or the legacy frame split.
     visible_frames, dropped = filter_visible_frames(
         all_frames, args.images, args.shape, args.area_frac, args.min_visible_frac
     )
-    print(f"dropped {len(dropped)}/{len(all_frames)} off-image frames")
+    print(f"train CSV: dropped {len(dropped)}/{len(all_frames)} off-image frames")
 
-    train_frames, val_frames = split_frames(visible_frames, args.val_frac, mode=args.split_mode)
-    split_map: dict[str, str] = {}
-    for s in train_frames:
-        split_map[s.frame] = "train"
-    for s in val_frames:
-        split_map[s.frame] = "val"
+    if args.val_csv is not None:
+        train_frames = visible_frames
+        all_val_frames = load_csv(args.val_csv)
+        val_frames, val_dropped = filter_visible_frames(
+            all_val_frames, args.images, args.shape, args.area_frac, args.min_visible_frac
+        )
+        print(
+            f"val CSV: dropped {len(val_dropped)}/{len(all_val_frames)} off-image frames"
+        )
+        overlap = {frame.frame for frame in train_frames} & {
+            frame.frame for frame in val_frames
+        }
+        if overlap:
+            sys.exit(
+                f"train and validation CSVs overlap on {len(overlap)} frame IDs "
+                f"(e.g. {sorted(overlap)[:5]})"
+            )
+    else:
+        train_frames, val_frames = split_frames(
+            visible_frames, args.val_frac, mode=args.split_mode
+        )
 
     frames_to_eval: list = []
     if "val" in args.splits:

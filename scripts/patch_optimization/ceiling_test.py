@@ -702,7 +702,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--images", type=Path, default=ROOT / "dsgn/datasets/arka/dsgn_awsim/training")
+    p.add_argument("--images", type=Path, default=ROOT / "dsgn/datasets/adria/training_kitti_labels")
     p.add_argument(
         "--csv",
         type=Path,
