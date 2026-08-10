@@ -14,7 +14,7 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 4. **Explain briefly why** each command matters — not just copy-paste.
 5. **Verify before fixing.** Use `ros2 topic info -v`, `ros2 topic echo --once`, `ros2 service type`, `ros2 interface show`, and logs. Do not guess silently.
 6. **Server caution:** This is a shared lab server. Ask before commands with global effects. Changes under `~/summer26` (user `adria`) are generally fine.
-7. **Sudo is run by adria, not by the agent.** The agent cannot enter a `sudo` password. When a task needs `sudo` (almost always `sudo docker ...`), **stop and give adria the exact command to copy-paste** — one command at a time, labeled `host` vs `inside Docker`, with a one-line reason. Do not assume adria knows the project; include enough context to run it blindly.
+7. **Docker no longer needs sudo** (`adria` is in the `docker` group), so agents can run containers directly. For anything else that genuinely needs `sudo`, **stop and give adria the exact command to copy-paste** — one at a time, labeled `host` vs `inside Docker`, with a one-line reason.
 
 ---
 
@@ -30,7 +30,7 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 | Autoware | Runs **inside Docker**, not natively on the host |
 | Docker image | `ghcr.io/autowarefoundation/autoware:universe-cuda-humble` |
 
-**Docker access:** `adria` is not in the `docker` group — `docker` commands need `sudo` and an interactive password. Agents must delegate those to adria.
+**Docker access:** `adria` **is** in the `docker` group (since Aug 2026) — run `docker ...` directly, no `sudo`, no password. Agents can therefore run Docker themselves. Note this is a shared server: `docker ps` will show other users' containers (e.g. `minikube`); never stop what you did not start.
 
 **ROS 2 discovery:** `--network host`, `ROS_DOMAIN_ID=26`, `CYCLONEDDS_URI` unset. AWSIM, Autoware, and RViz must all share the same domain.
 
@@ -161,14 +161,16 @@ export ROS_DOMAIN_ID=26
 
 ### Autoware (host — canonical, always use this)
 
-Two things are required beyond the base launch:
-
 | Mount / flag | Why |
 |---|---|
-| `ndt_scan_matcher.param.yaml` bind-mount | Nishi-Shinjuku scores ~2.2–2.4; default threshold 2.3 trips MRM `emergency_stop` while driving |
+| `ndt_scan_matcher.param.yaml` | Nishi-Shinjuku scores ~2.2–2.4; default threshold 2.3 trips MRM `emergency_stop` while driving |
+| `perception.launch.xml.no_detection` | Disables LiDAR object detection (CenterPoint / detection launch `if="false"`). Localization LiDAR stays on. |
+| `autonomous_emergency_braking.param.yaml` | Sets AEB `use_pointcloud_data: false` so raw LiDAR clusters don’t trigger AEB when detection is off |
 | `launch_rviz_adaptors:=true` | Bridges RViz **2D Rough Goal Pose** clicks to `/api/routing/set_route_points` |
 
-Also mount `scripts/` → `/home/aw/scripts` (helpers, traffic-light bridge, `dsgn_offline_*`) and `src/` → `/home/aw/ros2_ws/src` (`dsgn_offline` package). Optional: `data/bags` → `/home/aw/bags` for rosbag A/B tests.
+Also mount `scripts/` → `/home/aw/scripts` and `src/` → `/home/aw/ros2_ws/src`. Optional: `data/bags` → `/home/aw/bags` for rosbag A/B tests.
+
+**Note:** `spawn_test_npc_car.sh` still injects objects via `/simulation/dummy_perception_publisher/object_info` even with CenterPoint off — that path is separate from LiDAR detection.
 
 ```bash
 sudo docker run --rm -d \
@@ -183,6 +185,8 @@ sudo docker run --rm -d \
   -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
   -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
   -v "$HOME/summer26/logs:/home/aw/logs:rw" \
+  -v "$HOME/summer26/logs/perception.launch.xml.no_detection:/opt/autoware/tier4_perception_launch/share/tier4_perception_launch/launch/perception.launch.xml:ro" \
+  -v "$HOME/summer26/data/autoware_data/autonomous_emergency_braking.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/control/autoware_autonomous_emergency_braking/autonomous_emergency_braking.param.yaml:ro" \
   --entrypoint /bin/bash \
   ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
   -lc '
@@ -225,7 +229,51 @@ bash /home/aw/scripts/dsgn_offline_run.sh
 
 ### AWSIM (inside Docker, with GUI)
 
-AWSIM runs inside Docker (needs GUI access via `DISPLAY`/X11).
+AWSIM runs inside Docker (needs GUI access via `DISPLAY`/X11, i.e. the xrdp desktop —
+normally `:10`). It **cannot** run natively on the host: a host run dies with
+`UnsatisfiedLinkError: librcl.so`.
+
+Do **not** source ROS 2 for the AWSIM process — its `ros2-for-unity` is a standalone
+build with its own ROS 2 libraries. Also unset the ament/colcon prefix paths.
+
+**Manual / interactive (proven, uses the GUI `Load` button):**
+
+```bash
+cd ~/summer26/data/awsim
+docker run --rm -it \
+  --name awsim_gui_test \
+  --device nvidia.com/gpu=all \
+  --network host \
+  -e DISPLAY="$DISPLAY" \
+  -e HOME=/home/aw \
+  -e ROS_DOMAIN_ID=26 \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v "$HOME/summer26/data/awsim:/home/aw/awsim" \
+  --entrypoint /bin/bash \
+  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
+  -lc '
+    unset CYCLONEDDS_URI
+    unset ROS_DISTRO AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+    export ROS_DOMAIN_ID=26
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    cd /home/aw/awsim
+    ./extracted/awsim_labs_v1.6.1/awsim_labs.x86_64
+  '
+```
+
+`unset ROS_DISTRO` is **required**, not cosmetic. With it set, `ros2-for-unity` takes a
+slower "ROS is sourced" init path and the scene can finish loading first, in which case
+every C# publisher dies with `topic name is invalid` — camera, pose, odometry, IMU. It is
+a race, so it sometimes appears to work; it is much more likely to lose when Autoware is
+already running and loading the GPU. Always confirm with `ros2 topic list` rather than
+trusting that the window looks normal. Swap `extracted/` → `modded/` for the stereo build.
+
+**Scripted (no clicking):** `scripts/awsim_launch.sh [pristine|modded]`, then
+`scripts/awsim_verify.sh <container>`. This passes `--config` so the scene auto-loads,
+which additionally requires scrubbing `ROS_DISTRO` to avoid a startup race that kills
+every C# publisher (`/clock`, camera, vehicle status). See
+[`notes/AWSIM_STEREO_CAMERA.md`](notes/AWSIM_STEREO_CAMERA.md).
 
 ---
 
@@ -279,6 +327,11 @@ Shared tools live under `scripts/` (mounted at `/home/aw/scripts`). Recovery/dia
 
 | Script | Purpose |
 |--------|---------|
+| `scripts/awsim_launch.sh` | **Host:** launch AWSIM (`pristine`/`modded`) in Docker with correct env |
+| `scripts/awsim_verify.sh` | **Host:** check AWSIM topics, rates, live camera geometry |
+| `scripts/awsim_stereo_build.sh` | **Host:** compile the stereo-camera mod (`StereoMod.dll`) |
+| `scripts/awsim_stereo_install.py` | **Host:** register/`--uninstall` the mod in `modded/` |
+| `scripts/awsim_stereo_check.py` | **In Docker:** quantitative stereo pair validation |
 | `scripts/apply_route_from_osm.py` | Localize + set route from route JSON |
 | `scripts/traffic_light_green_bridge.py` | Publish all map lights as GREEN |
 | `scripts/run_traffic_light_bridge.sh` | **Host:** start bridge inside container |
@@ -323,6 +376,7 @@ Shared tools live under `scripts/` (mounted at `/home/aw/scripts`). Recovery/dia
 
 | Doc | Purpose |
 |-----|---------|
+| [`notes/AWSIM_STEREO_CAMERA.md`](notes/AWSIM_STEREO_CAMERA.md) | Adding a stereo camera to the AWSIM **binary** (no Unity); AWSIM launch gotchas |
 | [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md) | Offline Autoware replay workflow |
 | [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md) | Geometry, labels, finetune decisions |
 | [`notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md) | Historical det_head adapt (script removed) |
