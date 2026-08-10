@@ -5,7 +5,6 @@
 # Usage (inside Docker):
 #   bash /home/aw/scripts/drive_route_and_engage.sh
 #   bash /home/aw/scripts/drive_route_and_engage.sh /path/to/other_route.json
-#   bash /home/aw/scripts/drive_route_and_engage.sh --no-engage
 set -eo pipefail
 set +u
 source /opt/ros/humble/setup.bash
