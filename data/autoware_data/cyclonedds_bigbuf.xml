@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Minimal CycloneDDS config for the KITTI recorder.
+
+  Only raises the socket receive buffer. Discovery/interface settings are left
+  at CycloneDDS defaults on purpose: the rest of the stack launches with
+  CYCLONEDDS_URI unset, so pinning an interface here (as /home/aw/cyclonedds.xml
+  does with lo) hides every Autoware/AWSIM topic from the recorder.
+
+  Default buffers are 2 MB, which stereo + lidar traffic overruns, dropping
+  packets domain-wide and stalling Autoware. Requires net.core.rmem_max >= 10MB.
+-->
+<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <Internal>
+      <SocketReceiveBufferSize min="10MB"/>
+    </Internal>
+  </Domain>
+</CycloneDDS>

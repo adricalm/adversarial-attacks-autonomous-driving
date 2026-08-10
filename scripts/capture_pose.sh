@@ -14,6 +14,7 @@ source /opt/autoware/setup.bash
 set -u
 unset CYCLONEDDS_URI
 export ROS_DOMAIN_ID=26
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 TMP="$(mktemp)"
 trap 'rm -f "${TMP}"' EXIT

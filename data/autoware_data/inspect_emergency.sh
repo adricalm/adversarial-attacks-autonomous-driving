@@ -7,6 +7,8 @@ source /opt/autoware/setup.bash
 set -u
 unset CYCLONEDDS_URI
 export ROS_DOMAIN_ID=26
+# Without this the node falls back to the default RMW and sees an empty graph.
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 echo "============================================================"
 echo " Emergency / MRM root-cause inspection  $(date -Iseconds)"
