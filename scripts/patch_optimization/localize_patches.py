@@ -372,6 +372,7 @@ def draw_preview(
     p2: np.ndarray,
     convention: str,
     out_path: Path,
+    preview_area_frac: float | None,
 ) -> None:
     if not HAS_CV2:
         raise RuntimeError("cv2 required for --preview-dir")
@@ -394,10 +395,20 @@ def draw_preview(
             cv2.line(img, tuple(qs[i]), tuple(qs[i + 4]), (0, 200, 0), 1)
 
     for r in rows:
-        half = r.size // 2
-        x0 = int(round(r.center_x)) - half
-        y0 = int(round(r.center_y)) - half
-        x1, y1 = x0 + r.size, y0 + r.size
+        if preview_area_frac is None:
+            half = r.size // 2
+            x0 = int(round(r.center_x)) - half
+            y0 = int(round(r.center_y)) - half
+            x1, y1 = x0 + r.size, y0 + r.size
+        else:
+            scale = float(np.sqrt(max(preview_area_frac, 1e-6)))
+            width = max(1, int(round((r.x1 - r.x0) * scale)))
+            height = max(1, int(round((r.y1 - r.y0) * scale)))
+            face_cx = 0.5 * (r.x0 + r.x1)
+            face_cy = 0.5 * (r.y0 + r.y1)
+            x0 = int(round(face_cx - width / 2.0))
+            y0 = int(round(face_cy - height / 2.0))
+            x1, y1 = x0 + width, y0 + height
         cv2.rectangle(img, (x0, y0), (x1, y1), (0, 0, 255), 2)
         cv2.drawMarker(
             img,
@@ -491,6 +502,13 @@ def main() -> int:
         default=None,
         help="If set (and --images given), write per-frame preview PNGs",
     )
+    p.add_argument(
+        "--preview-area-frac",
+        type=float,
+        default=None,
+        help="Draw the face-aspect-ratio rectangle used by --shape face at this "
+        "area fraction (for example 0.50). Without it, draw the legacy CSV square.",
+    )
     args = p.parse_args()
 
     det_dir: Path = args.detections
@@ -583,6 +601,7 @@ def main() -> int:
                     p2,
                     args.box_convention,
                     args.preview_dir / f"{frame}_patch_loc.png",
+                    args.preview_area_frac,
                 )
 
     write_csv(args.output, rows)
