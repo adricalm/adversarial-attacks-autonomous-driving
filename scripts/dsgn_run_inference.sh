@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 # Run DSGN test_no_eval.py on a KITTI-layout dataset.
 #
-# WARNING: Uses PyTorch 2.6 — produces WRONG detections on Arka checkpoint.
-# Faithful PT 1.3 inference is not possible on this L40S host (CUDA ops + sm_89).
-# For correct detections use Docker on an old GPU (dsgn_build_docker.sh) or replay
-# Arka's precomputed outputs (notes/DSGN_OFFLINE_RUNBOOK.md).
+# WARNING: Uses PyTorch 2.6 — produces WRONG detections on Arka's finetune_60.
+# Prefer official KITTI finetune_48 (default below), or replay Arka's precomputed
+# outputs (notes/DSGN_OFFLINE_RUNBOOK.md).
 #
 # Usage:
 #   bash scripts/dsgn_run_inference.sh
 #   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
 #   bash scripts/dsgn_run_inference.sh --debug   # optional extra args to test_no_eval.py
-# GPU timing bench (separate script): bash scripts/dsgn_bench_inference.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"

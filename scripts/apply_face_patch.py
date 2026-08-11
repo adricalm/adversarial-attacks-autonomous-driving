@@ -173,6 +173,10 @@ def main():
                     default="bilinear",
                     help="Resampling filter for patch resize (default bilinear, "
                          "matches optimizer deployment)")
+    ap.add_argument("--frame-min", type=int, default=None,
+                    help="Only process frames with id >= this (inclusive)")
+    ap.add_argument("--frame-max", type=int, default=None,
+                    help="Only process frames with id <= this (inclusive)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -214,6 +218,12 @@ def main():
     n_patched = n_skipped = n_copied = 0
 
     for frame in frames:
+        frame_id = int(frame)
+        if args.frame_min is not None and frame_id < args.frame_min:
+            continue
+        if args.frame_max is not None and frame_id > args.frame_max:
+            continue
+
         left_in   = src_img2  / f"{frame}.png"
         right_in  = src_img3  / f"{frame}.png"
         calib_f   = src_calib / f"{frame}.txt"
