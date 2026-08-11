@@ -3,7 +3,7 @@
 #
 # WARNING: This env compiles and runs, but produces WRONG detections on Arka's
 # finetune_60.tar checkpoint (dozens of false cars on clean frames). For faithful
-# PT 1.3 inference use Docker on an old GPU — see notes/DSGN_PYTORCH_VERSIONING.md.
+# For Arka finetune_60, prefer precomputed dumps; official finetune_48 works on PT 2.6.
 #
 # Usage: bash ~/summer26/scripts/dsgn_setup_venv.sh
 set -euo pipefail

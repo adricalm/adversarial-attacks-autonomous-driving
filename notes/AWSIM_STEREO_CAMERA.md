@@ -9,7 +9,7 @@ with the left camera's intrinsics unchanged so Arka's calib files still apply. N
 file is rewritten and `extracted/` is untouched, so the existing pipeline is unaffected.
 Not yet done: recording a dataset, and a joint run with Autoware under GPU contention.
 
-Related: [`DSGN_AWSIM_FINDINGS.md`](DSGN_AWSIM_FINDINGS.md), [`DEBUG_LOG.md`](DEBUG_LOG.md).
+Related: [`DSGN_AWSIM_FINDINGS.md`](DSGN_AWSIM_FINDINGS.md), [`autoware-awsim-startup.md`](autoware-awsim-startup.md).
 
 ---
 

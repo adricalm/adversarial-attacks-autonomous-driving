@@ -13,7 +13,7 @@ Before building or running `dsgn_offline`:
 
 - [x] Autoware container running (`autoware_full_test`) with **canonical launch** from README (includes `src/` + `scripts/` mounts, NDT bind-mount, `launch_rviz_adaptors:=true`)
 - [x] AWSIM running, `/clock` has one publisher
-- [ ] Localization initialized, route set, traffic-light bridge running (`bash /home/aw/scripts/run_traffic_light_bridge_inside_container.sh`)
+- [ ] Localization initialized and route set (`bash /home/aw/scripts/drive_route_and_engage.sh`)
 - [ ] Ego driving or ready to engage (`/autoware/state` → 5)
 
 **Synchronization note:** `dsgn_offline` picks the nearest row in `path.txt` from current `/localization/pose_with_covariance`. Detections align only when ego `(x, y)` is close to Arka's recorded MGRS trajectory (~81377, 49917). Compare while driving:
@@ -28,13 +28,7 @@ head -3 /home/aw/ros2_ws/src/dsgn_offline/resource/path.txt
 
 ## 1. Restart Autoware — **host**
 
-Use the **canonical** `docker run` from the README (already mounts `src/`, `scripts/`, and `logs/`).
-
-Optional for bag recording (see [`ROSBAG_AB_TESTING.md`](ROSBAG_AB_TESTING.md)):
-
-```bash
--v "$HOME/summer26/data/bags:/home/aw/bags"
-```
+Use the **canonical** `docker run` from the README (mounts `src/`, `scripts/`, and `logs/` for AWSIM scratch output).
 
 **Why:** `dsgn_offline` must be built inside the image (needs `autoware_perception_msgs`). `src/` exposes the package; `scripts/` exposes build/run helpers.
 
@@ -67,11 +61,12 @@ source install/setup.bash
 
 ## 3. Run `dsgn_offline` — **inside Docker** (second shell or background)
 
-Stack must be up with localization + route. Recovery helper if needed:
+Stack must be up with localization + route. If AWSIM was restarted, re-init the route:
 
 ```bash
-bash /home/aw/autoware_data/recover_after_awsim_restart.sh \
-  /home/aw/autoware_data/route_candidates_straight.json
+bash /home/aw/autoware_data/verify_stack_ready.sh
+bash /home/aw/scripts/drive_route_and_engage.sh \
+  /home/aw/autoware_data/route_dsgn_ab.json
 ```
 
 Run the node:
@@ -132,13 +127,10 @@ RViz: enable perception object displays; check markers near ego.
 ```bash
 ros2 topic echo /planning/scenario_planning/trajectory --once
 ros2 topic echo /vehicle/status/velocity_status --once
-bash /home/aw/autoware_data/quick_motion_check.sh
 bash /home/aw/autoware_data/diagnose_stuck.sh
 ```
 
 Stop the node (Ctrl+C) and confirm behavior returns toward baseline when objects disappear.
-
-**A/B rosbag experiments:** [`notes/ROSBAG_AB_TESTING.md`](ROSBAG_AB_TESTING.md) — bags go to `~/summer26/data/bags/` (not under `autoware_data`).
 
 ---
 
@@ -184,7 +176,7 @@ Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its R
 | Config | `~/summer26/external/DSGN_custom/configs/config_car_12g_awsim.py` |
 | Checkpoint | `~/summer26/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar` |
 
-`scripts/dsgn_run_inference.sh` defaults to the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images. (`scripts/dsgn_run_inference_docker.sh` still defaults to `testing_offline_patched`.)
+`scripts/dsgn_run_inference.sh` defaults to the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images.
 
 **Inference** (`dsgn_run_inference.sh` moves KITTI txt to `dsgn/detections/adria/<tag>/`):
 
@@ -242,7 +234,7 @@ Adjust `--tag` on `test_no_eval.py` if you need a distinct output subdirectory n
 | ------------------------- | --------------------------------------------------------------------------- |
 | `package.xml not found`   | Add `src/` volume mount; restart container                                  |
 | `overlay not built`       | Run Step 2                                                                  |
-| MRM / engage blocked      | Unrelated to DSGN — see `notes/DEBUG_LOG.md`                                |
+| MRM / engage blocked      | Unrelated to DSGN — run `data/autoware_data/diagnose_stuck.sh` and `inspect_emergency.sh` |
 | Detections in wrong place | Ego not on Arka path; check pose vs `path.txt`                              |
 | `ros2` shows few topics   | `ros2 daemon stop && ros2 daemon start`; wait ~2–3 min after Autoware start |
 

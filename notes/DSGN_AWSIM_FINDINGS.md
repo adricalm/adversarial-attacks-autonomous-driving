@@ -1,7 +1,7 @@
 # DSGN on AWSIM — findings (Jul 16 2026)
 
 Concise log of what we learned fixing stereo 3D detection on AWSIM.  
-Related: [`DSGN_PYTORCH_VERSIONING.md`](DSGN_PYTORCH_VERSIONING.md), [`DSGN_OFFLINE_RUNBOOK.md`](DSGN_OFFLINE_RUNBOOK.md), [`official_vs_arka_dsgn_repo.md`](official_vs_arka_dsgn_repo.md).
+Related: [`DSGN_OFFLINE_RUNBOOK.md`](DSGN_OFFLINE_RUNBOOK.md).
 
 ---
 
@@ -82,7 +82,7 @@ DSGN training **always** expects KITTI via `Object3d`. Raw Arka-format labels �
 | Approach | Status |
 |----------|--------|
 | Ship **`finetune_48`** + half-res config + score thresh | Still the safe default until a full adapt beats it |
-| **`MODE=det_head`** on converted labels | **Tried** — see [`DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md); debug viz **not great** |
+| **`MODE=det_head`** on converted labels | **Tried** — debug viz **not great**; prefer full-model train from `finetune_48` |
 | **Full-model** on converted labels (Arka-style) | Next: train entire net from `finetune_48` via `dsgn_train.sh` |
 | Arka **`finetune_60`** on this host | Optional A/B via precomputed dumps; PT 2.6 re-inference unfaithful |
 
@@ -101,7 +101,7 @@ SAVEMODEL=~/summer26/dsgn/checkpoints/adria/kitti48_awsim_full_kitti_labels \
 bash ~/summer26/scripts/dsgn_train.sh
 ```
 
-(`dsgn_finetune_awsim.sh` with `MODE=gentle|det_head` no longer exists; historical det_head recipe is in [`DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md).)
+(`dsgn_finetune_awsim.sh` with `MODE=gentle|det_head` was removed; use `dsgn_train.sh` for full-model adapt instead.)
 
 ---
 

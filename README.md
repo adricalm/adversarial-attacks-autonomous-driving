@@ -4,6 +4,8 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 
 **Stack:** AWSIM (simulator) + Autoware Universe (perception, localization, planning) + RViz, over ROS 2 Humble, all inside Docker with host networking.
 
+> **Note:** This README is kept accurate for day-to-day work on the lab server. A shorter intern/supervisor handoff version is a later step — detailed sections below are intentional for now.
+
 ---
 
 ## For a new assistant (read this first)
@@ -59,6 +61,8 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 
 **AWSIM is the only publisher** of `/clock` and `/vehicle/status/*`. Do not run fake clock/status nodes.
 
+**Research path (current):** record stereo in AWSIM → DSGN inference (`finetune_48`, PT 2.6) → localize/optimize face patches → apply patches → optional `dsgn_offline` replay in Autoware → observe planning/control.
+
 ---
 
 ## Project layout
@@ -66,43 +70,34 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 ```text
 ~/summer26/
 ├── README.md
-├── .gitignore
 ├── data/
-│   ├── maps/
-│   │   └── nishishinjuku_autoware_map/   # lanelet2_map.osm, pointcloud, projector info
-│   ├── autoware_data/                    # mounted read-write into Autoware container
-│   │   ├── ml_models/                   # perception models (data_path)
-│   │   ├── ndt_scan_matcher.param.yaml  # ← bind-mounted into container (required)
-│   │   ├── route_candidates*.json       # generated start/goal poses
-│   │   └── (recovery / diagnostic shell scripts only — no tool duplicates)
-│   ├── awsim/
-│   │   ├── awsim_labs_v1.6.1.zip
-│   │   └── extracted/                   # AWSIM binary
-│   └── bags/                            # experiment rosbags (gitignored; owned by adria on host)
-├── dsgn/                                # DSGN pipeline — datasets, checkpoints, detections (gitignored bulk)
-│   ├── datasets/arka/dsgn_awsim/        # testing + testing_offline + split .txt (no training/)
-│   ├── datasets/adria/
-│   │   ├── dsgn_awsim/                  # adria patches / derived AWSIM experiments
-│   │   └── training_kitti_labels/       # ONLY training set (KITTI-converted label_2)
-│   ├── checkpoints/                   # .tar weights only (arka / kitti / adria)
-│   ├── detections/                    # per-frame KITTI .txt inference outputs
-│   └── training_logs/
-├── scripts/                             # all helpers (mounted at /home/aw/scripts in Autoware)
-│   ├── dsgn_*.sh / dsgn_*.py            # DSGN venv, train, infer, viz, merge, offline bridge
-│   ├── dsgn2_*.sh / dsgn2_*.py          # DSGN++ detour (kept; candidate for future cleanup)
-│   ├── apply_route_from_osm.py          # localize + set route (inside Docker)
-│   ├── traffic_light_green_bridge.py    # force GREEN TLs (inside Docker)
-│   ├── drive_route_and_engage.sh        # clear → pose → goal → engage
-│   └── archive/dsgn_pt_experiments/     # failed PT 1.3/1.10 host experiments
+│   ├── maps/nishishinjuku_autoware_map/
+│   ├── autoware_data/                   # ml_models, route JSONs, bind-mount overrides
+│   │   ├── ndt_scan_matcher.param.yaml
+│   │   ├── perception.launch.xml.no_detection   # disables LiDAR CenterPoint
+│   │   ├── autonomous_emergency_braking.param.yaml
+│   │   └── route_*.json, route_candidates*.json
+│   └── awsim/                           # extracted/ + modded/ binaries
+├── dsgn/                                # datasets, checkpoints, detections (bulk gitignored)
+│   ├── datasets/arka/dsgn_awsim/        # Arka test / testing_offline splits
+│   ├── datasets/adria/                  # training labels, recordings, patch experiments
+│   ├── datasets/recordings/             # KITTI-layout stereo recordings
+│   ├── checkpoints/
+│   └── detections/
+├── scripts/                             # mounted at /home/aw/scripts in Autoware
+│   ├── awsim_*.sh, drive_route_and_engage.sh, engage_*.sh
+│   ├── dsgn_*.sh / apply_*.py / record_kitti_dataset.sh
+│   ├── patch_optimization/            # localize → optimize → eval patches
+│   └── helpers/                         # optional viz, pose capture, NPC spawn, …
+├── src/                                 # separate git repos or small integration code
+│   ├── dsgn_offline/                    # ROS 2 offline detection publisher (fork)
+│   ├── awsim_stereo_mod/                # StereoMod C# source (built → modded AWSIM)
+│   └── awsim_to_kitti/                  # KITTI recorder used by record_kitti_dataset.sh
 ├── external/
-│   ├── autoware/                        # upstream Autoware reference (gitignored)
-│   ├── DSGN_custom/                     # stereo 3D detector — separate git repo (gitignored)
-│   └── DSGN2_awsim/                     # DSGN++ fork (feasibility detour; gitignored)
-├── logs/                                # script output logs (gitignored)
-├── notes/
-│   └── DEBUG_LOG.md                     # pitfalls, diagnostics chain, changelog
-└── src/
-    └── dsgn_offline/                    # ROS 2 offline perception bridge — separate git repo (gitignored)
+│   ├── DSGN_custom/                     # DSGN train/infer (fork)
+│   └── autoware/                        # upstream reference (gitignored)
+├── logs/                                # writable scratch (AWSIM logs); gitignored — safe to wipe
+└── notes/                               # findings and runbooks
 ```
 
 **Map:** Nishi-Shinjuku (`data/maps/nishishinjuku_autoware_map/`). MGRS grid `54SUE`. Elevation ~40.9 m — never use z=0.
@@ -136,13 +131,14 @@ git push -u origin master   # dsgn_offline uses main
 | Checkpoint | PT 2.6 on L40S | Notes |
 |------------|----------------|-------|
 | Official KITTI **`finetune_48`** | **Works** on AWSIM once config matches half-res loader | `input_size=[540,960]`, `output_size=[135,240]`; viz with `--box-convention kitti` |
-| Arka AWSIM **`finetune_60`** | **Unfaithful** vs Arka baseline | Trained PT 1.3; prefer precomputed dumps or old-GPU Docker |
+| Arka AWSIM **`finetune_60`** | **Unfaithful** vs Arka baseline | Trained PT 1.3; prefer Arka’s precomputed detection dumps for A/B |
 
 Geometry, label convention, and finetune strategy: **[`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md)**.  
-PyTorch / GPU matrix: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md). Offline Autoware replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
+Offline Autoware replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
 
-**Useful scripts:** `dsgn_run_inference.sh`, `dsgn_train.sh`, `dsgn_transform_label.py`, `visualize_dsgn_detections.py`.  
-(Historical `dsgn_finetune_awsim.sh` with `MODE=det_head|gentle` was removed; see [`notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md) for that experiment’s recipe.)
+**PyTorch note:** host venv uses PT 2.6 (L40S). Official KITTI `finetune_48` works; Arka `finetune_60` re-inference is unfaithful — prefer Arka’s precomputed detection dumps for A/B.
+
+**Useful scripts:** `dsgn_run_inference.sh`, `dsgn_train.sh`, `dsgn_transform_label.py`, `helpers/visualize_dsgn_detections.py`.
 
 ---
 
@@ -163,17 +159,17 @@ export ROS_DOMAIN_ID=26
 
 | Mount / flag | Why |
 |---|---|
-| `ndt_scan_matcher.param.yaml` | Nishi-Shinjuku scores ~2.2–2.4; default threshold 2.3 trips MRM `emergency_stop` while driving |
-| `perception.launch.xml.no_detection` | Disables LiDAR object detection (CenterPoint / detection launch `if="false"`). Localization LiDAR stays on. |
-| `autonomous_emergency_braking.param.yaml` | Sets AEB `use_pointcloud_data: false` so raw LiDAR clusters don’t trigger AEB when detection is off |
+| `data/autoware_data/ndt_scan_matcher.param.yaml` | Nishi-Shinjuku scores ~2.2–2.4; default threshold 2.3 trips MRM `emergency_stop` while driving |
+| `data/autoware_data/perception.launch.xml.no_detection` | Disables LiDAR object detection (CenterPoint). Localization LiDAR stays on. |
+| `data/autoware_data/autonomous_emergency_braking.param.yaml` | Sets AEB `use_pointcloud_data: false` so raw LiDAR clusters don’t trigger AEB when detection is off |
 | `launch_rviz_adaptors:=true` | Bridges RViz **2D Rough Goal Pose** clicks to `/api/routing/set_route_points` |
 
-Also mount `scripts/` → `/home/aw/scripts` and `src/` → `/home/aw/ros2_ws/src`. Optional: `data/bags` → `/home/aw/bags` for rosbag A/B tests.
+Also mount `scripts/` → `/home/aw/scripts`, `src/` → `/home/aw/ros2_ws/src`, and `logs/` → `/home/aw/logs` (writable scratch for AWSIM launch logs).
 
-**Note:** `spawn_test_npc_car.sh` still injects objects via `/simulation/dummy_perception_publisher/object_info` even with CenterPoint off — that path is separate from LiDAR detection.
+**Note:** `helpers/spawn_test_npc_car.sh` injects objects via `/simulation/dummy_perception_publisher/object_info` even with CenterPoint off — separate from LiDAR detection.
 
 ```bash
-sudo docker run --rm -d \
+docker run --rm -d \
   --name autoware_full_test \
   --device nvidia.com/gpu=all \
   --network host \
@@ -185,7 +181,7 @@ sudo docker run --rm -d \
   -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
   -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
   -v "$HOME/summer26/logs:/home/aw/logs:rw" \
-  -v "$HOME/summer26/logs/perception.launch.xml.no_detection:/opt/autoware/tier4_perception_launch/share/tier4_perception_launch/launch/perception.launch.xml:ro" \
+  -v "$HOME/summer26/data/autoware_data/perception.launch.xml.no_detection:/opt/autoware/tier4_perception_launch/share/tier4_perception_launch/launch/perception.launch.xml:ro" \
   -v "$HOME/summer26/data/autoware_data/autonomous_emergency_braking.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/control/autoware_autonomous_emergency_braking/autonomous_emergency_braking.param.yaml:ro" \
   --entrypoint /bin/bash \
   ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
@@ -211,13 +207,26 @@ sudo docker run --rm -d \
 ### Enter a running Autoware container
 
 ```bash
-sudo docker exec -it autoware_full_test bash
+docker exec -it autoware_full_test bash
 # then source ROS as above
 ```
 
+### Drive the car (inside Docker)
+
+After Autoware + AWSIM are up and `/clock` has a publisher:
+
+```bash
+bash /home/aw/scripts/drive_route_and_engage.sh
+# or: bash /home/aw/scripts/drive_route_and_engage.sh /home/aw/autoware_data/route_dsgn_ab.json
+```
+
+From host: `bash ~/summer26/scripts/engage_autoware.sh` (engage + motion check).
+
+**Startup order:** Autoware (detached) → wait ~2–3 min → AWSIM → (optional RViz) → `drive_route_and_engage.sh`.
+
 ### DSGN offline overlay (optional)
 
-Replay Arka's precomputed stereo detections into Autoware without replacing the full perception stack. **Step-by-step commands:** [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
+Replay precomputed KITTI-format detections into Autoware (folder of `.txt` + `path.txt` — **not** a rosbag). **Step-by-step:** [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
 
 The canonical `docker run` already mounts `src/` and `scripts/`. Build and run inside the container:
 
@@ -313,15 +322,14 @@ Healthy end state: `state: 5`, `velocity > 0`, MRM `state: 1`, `hazard emergency
 /system/emergency/hazard_status
 /api/fail_safe/mrm_state
 
-/perception/traffic_light_recognition/external/traffic_signals   # bridge publishes here
-/perception/traffic_light_recognition/traffic_signals            # arbiter merged output
+/perception/traffic_light_recognition/traffic_signals            # Autoware TL recognition output
 ```
 
 ---
 
 ## Helper scripts
 
-Shared tools live under `scripts/` (mounted at `/home/aw/scripts`). Recovery/diagnostics that are session-specific stay under `data/autoware_data/`.
+Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnostics under `data/autoware_data/`.
 
 ### Autoware / AWSIM (inside Docker unless noted)
 
@@ -332,19 +340,11 @@ Shared tools live under `scripts/` (mounted at `/home/aw/scripts`). Recovery/dia
 | `scripts/awsim_stereo_build.sh` | **Host:** compile the stereo-camera mod (`StereoMod.dll`) |
 | `scripts/awsim_stereo_install.py` | **Host:** register/`--uninstall` the mod in `modded/` |
 | `scripts/awsim_stereo_check.py` | **In Docker:** quantitative stereo pair validation |
-| `scripts/apply_route_from_osm.py` | Localize + set route from route JSON |
-| `scripts/traffic_light_green_bridge.py` | Publish all map lights as GREEN |
-| `scripts/run_traffic_light_bridge.sh` | **Host:** start bridge inside container |
-| `scripts/run_traffic_light_bridge_inside_container.sh` | Start bridge (already inside Docker) |
 | `scripts/drive_route_and_engage.sh` | Clear → init pose → goal → engage |
 | `scripts/engage_autoware.sh` | **Host:** engage + motion check |
-| `scripts/find_route_candidates.py` | **Host:** parse OSM → route JSON |
-| `scripts/apply_route_candidates.sh` | **Host:** find candidates + apply inside container |
-| `data/autoware_data/recover_after_awsim_restart.sh` | Full recovery after AWSIM restart |
-| `data/autoware_data/recover_from_mrm_emergency_stop.sh` | Recover from MRM latch (localization) |
-| `data/autoware_data/unstick_at_traffic_light.sh` | Stop → clear → re-route → engage |
-| `data/autoware_data/quick_motion_check.sh` | Snapshot: bridge / state / velocity |
+| `scripts/record_kitti_dataset.sh` | **Host:** record KITTI-layout stereo from modded AWSIM |
 | `data/autoware_data/diagnose_stuck.sh` | Why stopped? (MRM / obstacle / loc) |
+| `data/autoware_data/dsgn_chain_check.sh` | Verify detection → tracker → prediction wiring |
 | `data/autoware_data/inspect_emergency.sh` | Which diagnostic is causing hazard/MRM |
 | `data/autoware_data/verify_stack_ready.sh` | Post-restart health check |
 
@@ -354,33 +354,44 @@ Shared tools live under `scripts/` (mounted at `/home/aw/scripts`). Recovery/dia
 |--------|---------|
 | `scripts/dsgn_setup_venv.sh` | PT 2.6 + cu124 venv for L40S |
 | `scripts/dsgn_run_inference.sh` | Inference on host (PT 2.6; use `finetune_48`) |
-| `scripts/dsgn_run_inference_docker.sh` | Faithful PT 1.3 inference (needs old GPU, not L40S) |
-| `scripts/dsgn_bench_inference.sh` | GPU timing bench (`test_no_eval_timing.py`) |
 | `scripts/dsgn_train.sh` | Full-model fine-tune from `finetune_48` |
 | `scripts/dsgn_transform_label.py` | AWSIM `label_2` → KITTI convention |
-| `scripts/visualize_dsgn_detections.py` | Viz with `--box-convention {kitti,awsim}` |
 | `scripts/merge_dsgn_outputs.py` | Merge baseline + patched frame ranges |
 | `scripts/dsgn_offline_build.sh` | **Inside Docker:** colcon build `dsgn_offline` |
 | `scripts/dsgn_offline_run.sh` | **Inside Docker:** publish offline detections |
+| `scripts/apply_stereo_patches.py` | Apply square noise patches to stereo datasets |
+| `scripts/apply_face_patch.py` | Apply optimized face patch to a dataset |
 
-### DSGN++ (kept; future cleanup candidate)
+### Patch optimization (`scripts/patch_optimization/`)
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/dsgn2_build_docker.sh` | Build PT 1.7.1 DSGN++ image |
-| `scripts/dsgn2_run_inference.sh` | AWSIM-layout inference in Docker |
-| `scripts/dsgn2_run_kitti_inference.sh` | Real KITTI-subset inference |
-| `scripts/dsgn2_feasibility_all.sh` | Run feasibility gates in order |
+| `localize_patches.py` | Project rear-face boxes from detections → CSV |
+| `optimize_patch.py` | Optimize universal adversarial patch vs DSGN |
+| `eval_patch.py` | Offline evaluate patch suppression |
+| `prepare_recording_datasets.py` | Split/calib prep after `record_kitti_dataset.sh` |
+| `build_combined_dataset.py` | Merge recording CSVs for multi-run optimization |
+
+### Helpers (`scripts/helpers/` — optional)
+
+| Script | Purpose |
+|--------|---------|
+| `helpers/visualize_dsgn_detections.py` | Overlay KITTI/AWSIM boxes on images |
+| `helpers/visualize_patch.py` | Paste optimized patch onto sample frames |
+| `helpers/capture_pose.sh` | Dump ego pose for hand-built route JSON |
+| `helpers/make_route_json.sh` | Combine start/goal pose fragments |
+| `helpers/spawn_test_npc_car.sh` | Respawn DummyObject NPCs |
+| `helpers/monitor_stop_cause.py` | 5 Hz stop-cause logger while driving |
+| `helpers/download_autoware_artifacts_from_role.py` | Bootstrap Autoware artifacts (rare) |
 
 ### Notes
 
 | Doc | Purpose |
 |-----|---------|
+| [`notes/autoware-awsim-startup.md`](notes/autoware-awsim-startup.md) | Minimal AWSIM + Autoware startup for a new user |
 | [`notes/AWSIM_STEREO_CAMERA.md`](notes/AWSIM_STEREO_CAMERA.md) | Adding a stereo camera to the AWSIM **binary** (no Unity); AWSIM launch gotchas |
 | [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md) | Offline Autoware replay workflow |
 | [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md) | Geometry, labels, finetune decisions |
-| [`notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md`](notes/DSGN_ADAPT_DET_HEAD_KITTI_LABELS.md) | Historical det_head adapt (script removed) |
-| [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md) | PT / GPU matrix |
 
 ---
 
@@ -396,13 +407,11 @@ See `dsgn/` for datasets, checkpoints, and detection outputs; DSGN forks above f
 
 ## External references
 
-- Autoware upstream: `external/autoware/` (see [`notes/external_autoware_ref.md`](notes/external_autoware_ref.md))
-- DSGN stereo detector: `external/DSGN_custom/` — fork and commit separately (see layout above)
-- DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately (see layout above)
+- Glue repo: [adricalm/adversarial-attacks-autonomous-driving](https://github.com/adricalm/adversarial-attacks-autonomous-driving)
+- Autoware upstream: `external/autoware/` (gitignored local checkout)
+- DSGN stereo detector: `external/DSGN_custom/` — fork and commit separately
+- DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately
+- Arka org (upstream forks): [DF-Autoware-AWSIM](https://github.com/orgs/DF-Autoware-AWSIM/repositories)
 - Map: Autoware Nishi-Shinjuku sample (`lanelet2_map.osm` + pointcloud)
 - AWSIM Labs v1.6.1: `data/awsim/`
 - DSGN datasets: train = `dsgn/datasets/adria/training_kitti_labels/`; test/offline = `dsgn/datasets/arka/dsgn_awsim/` (Arka `training/` removed for disk)
-- Pitfalls, diagnostics chain, changelog: [`notes/DEBUG_LOG.md`](notes/DEBUG_LOG.md)
-- DSGN offline replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md)
-- DSGN AWSIM findings (geometry, labels, finetune): [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md)
-- DSGN PyTorch / GPU constraints: [`notes/DSGN_PYTORCH_VERSIONING.md`](notes/DSGN_PYTORCH_VERSIONING.md)
