@@ -5,12 +5,12 @@
 # re-spawns until Ctrl+C.
 #
 # Usage (inside Docker, AWSIM + Autoware up):
-#   bash /home/aw/scripts/spawn_test_npc_car.sh
-#   bash /home/aw/scripts/spawn_test_npc_car.sh --xy 81404.99,49954.37
-#   bash /home/aw/scripts/spawn_test_npc_car.sh \
+#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh
+#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh --xy 81404.99,49954.37
+#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh \
 #     --xy 81404.99,49954.37 \
 #     --quat -0.0065,-0.0045,0.7381,0.6747
-#   bash /home/aw/scripts/spawn_test_npc_car.sh --xy A,B --xy C,D
+#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh --xy A,B --xy C,D
 #
 # Flags:
 #   --xy X,Y          map position (repeatable). If omitted, uses legacy A+B.

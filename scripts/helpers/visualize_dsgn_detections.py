@@ -15,13 +15,13 @@ Two box conventions (see --box-convention):
 
 Usage:
   # Official KITTI finetune_48 detections
-  python scripts/visualize_dsgn_detections.py \\
+  python scripts/helpers/visualize_dsgn_detections.py \\
     --box-convention kitti \\
     --images .../image_2 --calib .../calib --detections .../finetune_48_... \\
     --frames 000105 --output /tmp/viz --label kitti
 
   # Arka offline / AWSIM GT
-  python scripts/visualize_dsgn_detections.py \\
+  python scripts/helpers/visualize_dsgn_detections.py \\
     --box-convention awsim --full-res-bbox \\
     --images .../image_2 --calib .../calib \\
     --detections src/dsgn_offline/resource/awsim_output_offline \\

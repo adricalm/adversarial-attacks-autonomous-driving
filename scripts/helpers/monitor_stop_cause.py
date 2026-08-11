@@ -5,8 +5,8 @@ Run inside the Autoware container while driving, then start the recorder in
 another terminal. Every line is wall-clock stamped so the moment the recorder
 attaches lines up with whichever signal changes.
 
-    python3 /home/aw/scripts/monitor_stop_cause.py
-    python3 /home/aw/scripts/monitor_stop_cause.py --log /home/aw/logs/stop.log
+    python3 /home/aw/scripts/helpers/monitor_stop_cause.py
+    python3 /home/aw/scripts/helpers/monitor_stop_cause.py --log /home/aw/logs/stop.log
 
 Columns:
   vel      measured longitudinal velocity (m/s)
