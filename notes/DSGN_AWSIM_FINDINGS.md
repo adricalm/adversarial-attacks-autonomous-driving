@@ -9,11 +9,9 @@ Related: [`DSGN_PYTORCH_VERSIONING.md`](DSGN_PYTORCH_VERSIONING.md), [`DSGN_OFFL
 
 1. **Hypothesis: PyTorch version** — Official DSGN authors reported a large eval drop when moving past PT 1.3. We blamed PT 2.6 on the L40S for “nonsense” detections (Arka `finetune_60` and early AWSIM runs). That **is still true for Arka’s PT 1.3 AWSIM checkpoint** on this host, but it was **not** the main reason official KITTI `finetune_48` looked broken on AWSIM.
 
-2. **Detour: DSGN++ (DSGN2)** — Tried for newer deps / GPU-friendly stack. Weak on AWSIM (KITTI-trained). On a KITTI subset it ran but missed many cars. Original DSGN looked better on the same subset (light check, not a full DSGN2 bake-off). Stayed on **`external/DSGN_custom`** for continuity with Autoware / `dsgn_offline`. Scripts under `scripts/dsgn2_*` are **kept for now**; removing them is future cleanup.
+2. **Real AWSIM fix: geometry + config** — Once half-res config matched the loader, **official `finetune_48` produced coherent boxes on AWSIM without finetuning**. Remaining pain: **false positives**.
 
-3. **Real AWSIM fix: geometry + config** — Once half-res config matched the loader, **official `finetune_48` produced coherent boxes on AWSIM without finetuning**. Remaining pain: **false positives**.
-
-4. **Label convention** — Arka’s AWSIM `label_2` is **not** true KITTI. Early finetunes trained against wrong targets. We documented the remap, converted labels under adria, and started **`det_head` adapt from `finetune_48`**.
+3. **Label convention** — Arka’s AWSIM `label_2` is **not** true KITTI. Early finetunes trained against wrong targets. We documented the remap, converted labels under adria, and started **`det_head` adapt from `finetune_48`**.
 
 ---
 
@@ -73,7 +71,7 @@ Script: `scripts/dsgn_transform_label.py`
 
 **Arka’s `training/` was deleted** to free disk (~20G). It is no longer on this host. All finetune `DATA_PATH` must point at `training_kitti_labels`. Do not assume `dsgn/datasets/arka/dsgn_awsim/training` exists.
 
-Viz: `scripts/visualize_dsgn_detections.py --box-convention {awsim,kitti}`.
+Viz: `scripts/helpers/visualize_dsgn_detections.py --box-convention {awsim,kitti}`.
 
 DSGN training **always** expects KITTI via `Object3d`. Raw Arka-format labels → wrong targets → aggressive finetune destroys geometry.
 
