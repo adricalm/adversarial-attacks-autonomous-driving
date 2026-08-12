@@ -97,7 +97,7 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 │   ├── DSGN_custom/                     # DSGN train/infer (fork)
 │   └── autoware/                        # upstream reference (gitignored)
 ├── logs/                                # writable scratch (AWSIM logs); gitignored — safe to wipe
-└── notes/                               # findings and runbooks
+└── notes26/                             # findings and runbooks
 ```
 
 **Map:** Nishi-Shinjuku (`data/maps/nishishinjuku_autoware_map/`). MGRS grid `54SUE`. Elevation ~40.9 m — never use z=0.
@@ -124,7 +124,7 @@ git push -u origin master   # dsgn_offline uses main
 
 **Workflow:** edit inside the nested repo → `git commit` / `git push` there. Only commit integration docs, scripts, and small configs in `summer26`. Clone the forks locally after a fresh checkout (they are not bundled in this repo).
 
-**Dataset split (disk space):** Training lives only under **`dsgn/datasets/adria/training_kitti_labels/`** (KITTI-converted `label_2`). Arka’s original `training/` was removed to free space. Keep using Arka for **`testing/`**, **`testing_offline/`**, and split files (`trainval.txt`, `test_offline*.txt`, …). Details: [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md).
+**Dataset split (disk space):** Training lives only under **`dsgn/datasets/adria/training_kitti_labels/`** (KITTI-converted `label_2`). Arka’s original `training/` was removed to free space. Keep using Arka for **`testing/`**, **`testing_offline/`**, and split files (`trainval.txt`, `test_offline*.txt`, …). Details: [`notes26/DSGN_AWSIM_FINDINGS.md`](notes26/DSGN_AWSIM_FINDINGS.md).
 
 **DSGN on this host (L40S) — two different stories:**
 
@@ -133,8 +133,8 @@ git push -u origin master   # dsgn_offline uses main
 | Official KITTI **`finetune_48`** | **Works** on AWSIM once config matches half-res loader | `input_size=[540,960]`, `output_size=[135,240]`; viz with `--box-convention kitti` |
 | Arka AWSIM **`finetune_60`** | **Unfaithful** vs Arka baseline | Trained PT 1.3; prefer Arka’s precomputed detection dumps for A/B |
 
-Geometry, label convention, and finetune strategy: **[`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md)**.  
-Offline Autoware replay: [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
+Geometry, label convention, and finetune strategy: **[`notes26/DSGN_AWSIM_FINDINGS.md`](notes26/DSGN_AWSIM_FINDINGS.md)**.  
+Offline Autoware replay: [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md).
 
 **PyTorch note:** host venv uses PT 2.6 (L40S). Official KITTI `finetune_48` works; Arka `finetune_60` re-inference is unfaithful — prefer Arka’s precomputed detection dumps for A/B.
 
@@ -226,7 +226,7 @@ From host: `bash ~/summer26/scripts/engage_autoware.sh` (engage + motion check).
 
 ### DSGN offline overlay (optional)
 
-Replay precomputed KITTI-format detections into Autoware (folder of `.txt` + `path.txt` — **not** a rosbag). **Step-by-step:** [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md).
+Replay precomputed KITTI-format detections into Autoware (folder of `.txt` + `path.txt` — **not** a rosbag). **Step-by-step:** [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md).
 
 The canonical `docker run` already mounts `src/` and `scripts/`. Build and run inside the container:
 
@@ -282,7 +282,7 @@ trusting that the window looks normal. Swap `extracted/` → `modded/` for the s
 `scripts/awsim_verify.sh <container>`. This passes `--config` so the scene auto-loads,
 which additionally requires scrubbing `ROS_DISTRO` to avoid a startup race that kills
 every C# publisher (`/clock`, camera, vehicle status). See
-[`notes/AWSIM_STEREO_CAMERA.md`](notes/AWSIM_STEREO_CAMERA.md).
+[`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md).
 
 ---
 
@@ -388,10 +388,10 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 
 | Doc | Purpose |
 |-----|---------|
-| [`notes/autoware-awsim-startup.md`](notes/autoware-awsim-startup.md) | Minimal AWSIM + Autoware startup for a new user |
-| [`notes/AWSIM_STEREO_CAMERA.md`](notes/AWSIM_STEREO_CAMERA.md) | Adding a stereo camera to the AWSIM **binary** (no Unity); AWSIM launch gotchas |
-| [`notes/DSGN_OFFLINE_RUNBOOK.md`](notes/DSGN_OFFLINE_RUNBOOK.md) | Offline Autoware replay workflow |
-| [`notes/DSGN_AWSIM_FINDINGS.md`](notes/DSGN_AWSIM_FINDINGS.md) | Geometry, labels, finetune decisions |
+| [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md) | Minimal AWSIM + Autoware startup for a new user |
+| [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md) | Adding a stereo camera to the AWSIM **binary** (no Unity); AWSIM launch gotchas |
+| [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md) | Offline Autoware replay workflow |
+| [`notes26/DSGN_AWSIM_FINDINGS.md`](notes26/DSGN_AWSIM_FINDINGS.md) | Geometry, labels, finetune decisions |
 
 ---
 

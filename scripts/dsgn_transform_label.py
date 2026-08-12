@@ -25,7 +25,7 @@ Usage (host):
 
 Note (Jul 2026): Arka's training/ tree was removed from this host to free space.
   Defaults below may not exist anymore; pass --labels_path if you still have a source.
-  Training DATA_PATH is always adria/training_kitti_labels (see notes/DSGN_AWSIM_FINDINGS.md).
+  Training DATA_PATH is always adria/training_kitti_labels (see notes26/DSGN_AWSIM_FINDINGS.md).
 """
 from __future__ import annotations
 
