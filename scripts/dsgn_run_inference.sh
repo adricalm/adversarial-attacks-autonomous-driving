@@ -3,12 +3,24 @@
 #
 # WARNING: Uses PyTorch 2.6 — produces WRONG detections on Arka's finetune_60.
 # Prefer official KITTI finetune_48 (default below), or replay Arka's precomputed
-# outputs (notes/DSGN_OFFLINE_RUNBOOK.md).
+# outputs (notes26/DSGN_OFFLINE_RUNBOOK.md).
 #
 # Usage:
 #   bash scripts/dsgn_run_inference.sh
 #   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
 #   bash scripts/dsgn_run_inference.sh --debug   # optional extra args to test_no_eval.py
+#
+# Test recordings (clean GT detections, one subfolder per dataset):
+#   DS=~/summer26/dsgn/datasets/recordings/test_frontal1
+#   DATA_PATH="$DS" SPLIT_FILE="$DS/frames.txt" \
+#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings TAG=test_frontal1 \
+#     bash scripts/dsgn_run_inference.sh
+#
+# Patched test recordings (subfolder per patch size, then per dataset):
+#   PATCH_DS=~/summer26/dsgn/datasets/adria/6.recordings_test_3_sizes_optimization/test_frontal1_face050
+#   DATA_PATH="$PATCH_DS" SPLIT_FILE="$DS/frames.txt" \
+#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings_3_patches/face050 TAG=test_frontal1 \
+#     bash scripts/dsgn_run_inference.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
