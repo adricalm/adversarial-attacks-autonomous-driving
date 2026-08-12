@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spawn stationary NPC car(s) for AWSIM (DummyObject / RVIZNPCSpawner).
+# Spawn NPC car(s) for AWSIM (DummyObject / RVIZNPCSpawner).
 #
 # AWSIM destroys NPCs after ~30 s (Unity "Despawn time"); this script
 # re-spawns until Ctrl+C.
@@ -11,14 +11,19 @@
 #     --xy 81404.99,49954.37 \
 #     --quat -0.0065,-0.0045,0.7381,0.6747
 #   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh --xy A,B --xy C,D
+#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh \
+#     --xy 81761.49,50562.99 --quat ... --speed-kmh 10
 #
 # Flags:
 #   --xy X,Y          map position (repeatable). If omitted, uses legacy A+B.
 #   --quat X,Y,Z,W    orientation for the next --xy (default: legacy z=0.33,w=0.94)
+#   --speed-kmh N     target speed in km/h (default 0 = stationary). Sets
+#                     max/min velocity and initial forward twist [m/s].
 #   --respawn SEC     respawn period (default 27; must be < AWSIM despawnTime)
 #   --show false      skip spawn and exit
 SHOW_CARS=true
 RESPAWN_SEC=27
+SPEED_KMH=0
 
 set -euo pipefail
 
@@ -45,6 +50,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --respawn)
       RESPAWN_SEC="$2"
+      shift 2
+      ;;
+    --speed-kmh)
+      SPEED_KMH="$2"
       shift 2
       ;;
     --show)
@@ -90,17 +99,38 @@ DEFAULT_QY=0.0
 DEFAULT_QZ=0.33
 DEFAULT_QW=0.94
 
+VEL_MPS="$(python3 -c "print(${SPEED_KMH}/3.6)")"
+
 spawn() {
   local x="$1" y="$2" uid="$3" qx="$4" qy="$5" qz="$6" qw="$7"
-  ros2 topic pub --once "${TOPIC}" "${MSG_TYPE}" "{
+  local twist_fields="linear: {x: ${VEL_MPS}, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}"
+  if [[ "${MSG_TYPE}" == *SimulatedObject* ]]; then
+    ros2 topic pub --once "${TOPIC}" "${MSG_TYPE}" "{
     header: {frame_id: map},
     id: {uuid: [${uid}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]},
     initial_state: {pose_covariance: {pose: {
       position: {x: ${x}, y: ${y}, z: 0.0},
-      orientation: {x: ${qx}, y: ${qy}, z: ${qz}, w: ${qw}}}}},
+      orientation: {x: ${qx}, y: ${qy}, z: ${qz}, w: ${qw}}},
+      covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]},
+    twist_covariance: {twist: {${twist_fields}},
+      covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}},
     classification: {label: 1, probability: 1.0},
     shape: {type: 0, dimensions: {x: 4.0, y: 1.8, z: 1.5}},
-    max_velocity: 0.0, min_velocity: 0.0, action: 0}" >/dev/null
+    max_velocity: ${VEL_MPS}, min_velocity: ${VEL_MPS}, action: 0, movement_model: 0}" >/dev/null
+  else
+    ros2 topic pub --once "${TOPIC}" "${MSG_TYPE}" "{
+    header: {frame_id: map},
+    id: {uuid: [${uid}, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]},
+    initial_state: {pose_covariance: {pose: {
+      position: {x: ${x}, y: ${y}, z: 0.0},
+      orientation: {x: ${qx}, y: ${qy}, z: ${qz}, w: ${qw}}},
+      covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]},
+    twist_covariance: {twist: {${twist_fields}},
+      covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]}},
+    classification: {label: 1, probability: 1.0},
+    shape: {type: 0, dimensions: {x: 4.0, y: 1.8, z: 1.5}},
+    max_velocity: ${VEL_MPS}, min_velocity: ${VEL_MPS}, action: 0}" >/dev/null
+  fi
 }
 
 parse_xy() {
@@ -155,6 +185,11 @@ fi
 
 N=${#SPAWN_X[@]}
 echo "Respawning ${N} NPC(s) every ${RESPAWN_SEC}s (Ctrl+C to stop)."
+if [[ "${SPEED_KMH}" != "0" && "${SPEED_KMH}" != "0.0" ]]; then
+  echo "  speed: ${SPEED_KMH} km/h (${VEL_MPS} m/s) straight-line"
+else
+  echo "  speed: stationary"
+fi
 for i in "${!SPAWN_X[@]}"; do
   echo "  [$i] x=${SPAWN_X[$i]} y=${SPAWN_Y[$i]} quat=${SPAWN_QX[$i]},${SPAWN_QY[$i]},${SPAWN_QZ[$i]},${SPAWN_QW[$i]}"
 done
