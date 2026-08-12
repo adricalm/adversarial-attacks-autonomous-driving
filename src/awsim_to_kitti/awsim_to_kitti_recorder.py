@@ -16,13 +16,9 @@ Only what the simulator cannot reproduce later:
   image_3/%06d.png     right (StereoMod clone, +0.54 m baseline)
   velodyne/%06d.bin    float32 x,y,z,intensity   (--no-velodyne to skip)
   pose/path.txt        "%06d x y yaw" per frame, Arka's format
-  meta/run.json        topics, args, both camera_info, git commit
-  meta/frames.ndjson   per-frame stamps, full ego pose, CenterPoint objects
 
-calib/ and label_2/ are deliberately NOT written here. Both are derivable from
-meta/ offline, and both have open questions (Arka's R0_rect and Tr_velo_to_cam
-are copied from real KITTI and do not describe this rig). Generating them in
-post means a bad choice costs a re-run of a script, not a re-drive.
+calib/ is NOT written here — copy a known-good KITTI calib file in post
+(prepare_recording_datasets.py) because the rig is fixed.
 
 GOTCHAS THIS HANDLES
 - /sensing/camera/traffic_light/image_raw has TWO publishers in a full Autoware
@@ -40,16 +36,13 @@ Usage (inside a container on ROS_DOMAIN_ID=26):
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
 import queue
 import signal
-import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timezone
 
 import cv2
 import numpy as np
@@ -59,18 +52,12 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import CameraInfo, Image, PointCloud2
+from sensor_msgs.msg import Image, PointCloud2
 from sensor_msgs_py import point_cloud2
-
-try:
-    from autoware_perception_msgs.msg import DetectedObjects
-except ImportError:  # perception stack not sourced; objects are optional
-    DetectedObjects = None
 
 LEFT_TOPIC = "/sensing/camera/traffic_light/image_raw"
 RIGHT_TOPIC = "/sensing/camera_right/traffic_light/image_raw"
 LIDAR_TOPIC = "/sensing/lidar/top/pointcloud_raw"
-OBJECTS_TOPIC = "/perception/object_recognition/detection/centerpoint/objects"
 POSE_TOPIC = "/localization/pose_with_covariance"
 
 
@@ -83,18 +70,6 @@ def yaw_from_quaternion(q) -> float:
     siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
     cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
     return math.atan2(siny_cosp, cosy_cosp)
-
-
-def git_commit() -> str | None:
-    try:
-        here = os.path.dirname(os.path.abspath(__file__))
-        out = subprocess.run(
-            ["git", "-C", here, "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5,
-        )
-        return out.stdout.strip() or None
-    except Exception:
-        return None
 
 
 class FrameJob:
@@ -118,8 +93,6 @@ class Recorder(Node):
         self.duplicates = 0
         self.last_left_stamp = None
         self.latest_pose = None
-        self.latest_objects = None
-        self.camera_info = {}
         self.t_start = time.time()
         self._last_report_t = self.t_start
         self._last_report_n = 0
@@ -129,20 +102,15 @@ class Recorder(Node):
             "image_2": os.path.join(self.out, "image_2"),
             "image_3": os.path.join(self.out, "image_3"),
             "pose": os.path.join(self.out, "pose"),
-            "meta": os.path.join(self.out, "meta"),
         }
         if not args.no_velodyne:
             self.dirs["velodyne"] = os.path.join(self.out, "velodyne")
         for d in self.dirs.values():
             os.makedirs(d, exist_ok=True)
 
-        # Line-buffered so Ctrl+C / kill cannot leave path.txt empty while
-        # frames.ndjson (which fills the 8 KiB block buffer faster) looks fine.
+        # Line-buffered so Ctrl+C / kill cannot leave path.txt empty.
         self.path_txt = open(
             os.path.join(self.dirs["pose"], "path.txt"), "a", buffering=1
-        )
-        self.frames_ndjson = open(
-            os.path.join(self.dirs["meta"], "frames.ndjson"), "a", buffering=1
         )
         self._finished = False
         self._stop = False
@@ -169,40 +137,11 @@ class Recorder(Node):
         self.create_subscription(
             PoseWithCovarianceStamped, args.pose_topic, self._on_pose, 10
         )
-        if DetectedObjects is not None:
-            self.create_subscription(
-                DetectedObjects, args.objects_topic, self._on_objects, 10
-            )
-        for side, topic in (("left", args.left_topic), ("right", args.right_topic)):
-            info_topic = topic.rsplit("/", 1)[0] + "/camera_info"
-            self.create_subscription(
-                CameraInfo, info_topic,
-                lambda m, s=side, t=info_topic: self._on_camera_info(s, t, m),
-                qos_profile_sensor_data,
-            )
 
         self.create_timer(5.0, self._report)
 
     def _on_pose(self, msg):
         self.latest_pose = msg
-
-    def _on_objects(self, msg):
-        self.latest_objects = msg
-
-    def _on_camera_info(self, side, topic, msg):
-        if side in self.camera_info:
-            return
-        self.camera_info[side] = {
-            "topic": topic,
-            "frame_id": msg.header.frame_id,
-            "width": msg.width,
-            "height": msg.height,
-            "K": list(msg.k),
-            "P": list(msg.p),
-            "R": list(msg.r),
-            "D": list(msg.d),
-            "distortion_model": msg.distortion_model,
-        }
 
     def _on_frame(self, left, right, lidar=None):
         key = stamp_key(left)
@@ -226,54 +165,14 @@ class Recorder(Node):
         self._write_sidecar(idx, left, right, lidar)
 
     def _write_sidecar(self, idx, left, right, lidar):
-        record = {
-            "frame": f"{idx:06d}",
-            "stamp_left": stamp_key(left),
-            "stamp_right": stamp_key(right),
-            "stamp_lidar": stamp_key(lidar) if lidar is not None else None,
-            "wall_time": datetime.now(timezone.utc).isoformat(),
-        }
-        if self.latest_pose is not None:
-            p = self.latest_pose.pose.pose.position
-            o = self.latest_pose.pose.pose.orientation
-            yaw = yaw_from_quaternion(o)
-            record["ego"] = {
-                "stamp": stamp_key(self.latest_pose),
-                "position": [p.x, p.y, p.z],
-                "orientation": [o.x, o.y, o.z, o.w],
-                "yaw": yaw,
-            }
-            with self._lock:
-                self.path_txt.write(f"{idx:06d} {p.x:.6f} {p.y:.6f} {yaw:.6f}\n")
-                self.path_txt.flush()
-        if self.latest_objects is not None:
-            record["centerpoint"] = self._objects_to_json(self.latest_objects)
-
+        if self.latest_pose is None:
+            return
+        p = self.latest_pose.pose.pose.position
+        o = self.latest_pose.pose.pose.orientation
+        yaw = yaw_from_quaternion(o)
         with self._lock:
-            self.frames_ndjson.write(json.dumps(record) + "\n")
-            self.frames_ndjson.flush()
-
-    @staticmethod
-    def _objects_to_json(msg):
-        out = {"stamp": stamp_key(msg), "frame_id": msg.header.frame_id, "objects": []}
-        for obj in msg.objects:
-            pose = obj.kinematics.pose_with_covariance.pose
-            cls = obj.classification[0] if obj.classification else None
-            out["objects"].append({
-                "label": int(cls.label) if cls else None,
-                "probability": float(cls.probability) if cls else None,
-                "existence_probability": float(obj.existence_probability),
-                "position": [pose.position.x, pose.position.y, pose.position.z],
-                "orientation": [
-                    pose.orientation.x, pose.orientation.y,
-                    pose.orientation.z, pose.orientation.w,
-                ],
-                "dimensions": [
-                    obj.shape.dimensions.x, obj.shape.dimensions.y, obj.shape.dimensions.z,
-                ],
-                "shape_type": int(obj.shape.type),
-            })
-        return out
+            self.path_txt.write(f"{idx:06d} {p.x:.6f} {p.y:.6f} {yaw:.6f}\n")
+            self.path_txt.flush()
 
     def _writer_loop(self):
         bridge = CvBridge()
@@ -335,7 +234,7 @@ class Recorder(Node):
         required = [("left", self.args.left_topic), ("right", self.args.right_topic)]
         if not self.args.no_velodyne:
             required.append(("lidar", self.args.lidar_topic))
-        optional = [("pose", self.args.pose_topic), ("objects", self.args.objects_topic)]
+        optional = [("pose", self.args.pose_topic)]
 
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -374,43 +273,14 @@ class Recorder(Node):
             self.path_txt.close()
         except Exception:
             pass
-        try:
-            self.frames_ndjson.flush()
-            self.frames_ndjson.close()
-        except Exception:
-            pass
 
         elapsed = time.time() - self.t_start
-        summary = {
-            "created": datetime.now(timezone.utc).isoformat(),
-            "git_commit": git_commit(),
-            "elapsed_s": round(elapsed, 2),
-            "frames_written": self.written,
-            "frames_dropped": self.dropped,
-            "duplicates_skipped": self.duplicates,
-            "mean_fps": round(self.written / elapsed, 3) if elapsed > 0 else None,
-            "topics": {
-                "left": self.args.left_topic,
-                "right": self.args.right_topic,
-                "lidar": None if self.args.no_velodyne else self.args.lidar_topic,
-                "pose": self.args.pose_topic,
-                "objects": self.args.objects_topic,
-            },
-            "args": {k: (str(v) if isinstance(v, os.PathLike) else v)
-                     for k, v in vars(self.args).items()},
-            "camera_info": self.camera_info,
-        }
-        with open(os.path.join(self.dirs["meta"], "run.json"), "w") as f:
-            json.dump(summary, f, indent=2)
+        mean_fps = round(self.written / elapsed, 3) if elapsed > 0 else None
 
         print()
         print(f"wrote {self.written} frames to {self.out}")
         print(f"  dropped={self.dropped}  dup_skipped={self.duplicates}  "
-              f"mean={summary['mean_fps']} fps")
-        if not self.camera_info:
-            print("  WARNING: no camera_info captured; calib generation will need defaults")
-        elif len(self.camera_info) < 2:
-            print(f"  WARNING: camera_info for only {list(self.camera_info)}")
+              f"mean={mean_fps} fps")
 
 
 def build_parser():
@@ -421,7 +291,6 @@ def build_parser():
     p.add_argument("--left-topic", default=LEFT_TOPIC)
     p.add_argument("--right-topic", default=RIGHT_TOPIC)
     p.add_argument("--lidar-topic", default=LIDAR_TOPIC)
-    p.add_argument("--objects-topic", default=OBJECTS_TOPIC)
     p.add_argument("--pose-topic", default=POSE_TOPIC)
     p.add_argument("--no-velodyne", action="store_true",
                    help="Skip point clouds (training-only sets do not need them)")
@@ -447,7 +316,7 @@ def main(argv=None):
     rclpy.init()
     node = Recorder(args)
     # `docker stop` sends SIGTERM; without this the process dies before
-    # finish() flushes path.txt and writes run.json.
+    # finish() flushes path.txt.
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
 
     exit_code = 0
@@ -467,8 +336,7 @@ def main(argv=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # Always flush path.txt / frames.ndjson / run.json — including when
-        # Ctrl+C lands during preflight (previous bug: empty path.txt).
+        # Always flush path.txt — including when Ctrl+C lands during preflight.
         node.finish()
         try:
             node.destroy_node()

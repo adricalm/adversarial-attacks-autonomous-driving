@@ -8,8 +8,8 @@
 # graph and keeps the recorder's CPU load off the stack.
 #
 # Output goes to dsgn/datasets/<run_id>/ (already gitignored) in the layout
-# optimize_patch.py expects: image_2/, image_3/, plus velodyne/, pose/, meta/.
-# calib/ and label_2/ are generated afterwards from meta/, not recorded.
+# optimize_patch.py expects: image_2/, image_3/, velodyne/, pose/path.txt.
+# calib/ is added afterwards via prepare_recording_datasets.py (fixed rig copy).
 #
 # Usage:
 #   scripts/record_kitti_dataset.sh adria/awsim_stereo_001
