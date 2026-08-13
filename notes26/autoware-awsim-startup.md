@@ -4,7 +4,7 @@ This is intentionally a Docker setup. The server host is newer than the supporte
 
 ### What is configurable, and what is a project convention?
 
-- `ROOT` is the only path a new user should normally change. It is the checkout directory; mine was `~/summer26`.
+- `ROOT` is the only path that normally needs changing. It is the checkout directory; default is `~/summer26`.
 - Keep `DOMAIN=26` for this checkout. A ROS domain is not machine-specific, but every ROS process must use the same one. Several helper scripts currently embed `26`, so changing it means updating those scripts consistently.
 - `MAP_NAME`, `IMAGE`, `AUTOWARE_CONTAINER`, and `AWSIM_DISPLAY` are named settings below.
 - The commands assume Docker GPU access is already enabled for the lab user (the `docker run … --device nvidia.com/gpu=all` commands must work).

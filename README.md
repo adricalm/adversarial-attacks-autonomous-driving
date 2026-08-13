@@ -20,7 +20,7 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 
 3. Copy non-git assets from the shared drive — see [`HANDOFF.md`](HANDOFF.md) for the link and destination folders (AWSIM, map PCDs, Autoware `ml_models`, `dsgn/datasets`, checkpoints).
 4. Bring up the stack: [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md).
-5. DSGN: prefer checkpoint **`finetune_48`** (PyTorch 2.6). Setup: `bash scripts/dsgn/dsgn_setup_venv.sh`.
+5. DSGN:  checkpoint **`finetune_48`** (PyTorch 2.6). Setup: `bash scripts/dsgn/dsgn_setup_venv.sh`.
 6. Patches: [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md).
 
 **Not in git:** AWSIM binaries, map pointclouds, Autoware ML models, datasets/checkpoints/detections, and the two nested forks above.
@@ -31,15 +31,11 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 
 | Item | Value |
 |------|-------|
-| Host user | `adria` |
-| Hostname | `sys-user-PowerEdge-R7715` |
 | Project root | `~/summer26` |
 | GPU | NVIDIA L40S |
 | Host OS | Ubuntu 25.10 |
 | Autoware | Runs **inside Docker**, not natively on the host |
 | Docker image | `ghcr.io/autowarefoundation/autoware:universe-cuda-humble` |
-
-**Docker access:** `adria` **is** in the `docker` group (since Aug 2026) — run `docker ...` directly, no `sudo`, no password. Agents can therefore run Docker themselves. Note this is a shared server: `docker ps` will show other users' containers (e.g. `minikube`); never stop what you did not start.
 
 **ROS 2 discovery:** `--network host`, `ROS_DOMAIN_ID=26`, `CYCLONEDDS_URI` unset. AWSIM, Autoware, and RViz must all share the same domain.
 
@@ -65,8 +61,6 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 │  └──────────────┘                                           │
 └─────────────────────────────────────────────────────────────┘
 ```
-
-**AWSIM is the only publisher** of `/clock` and `/vehicle/status/*`. Do not run fake clock/status nodes.
 
 **Research path (current):** record stereo in AWSIM → DSGN inference (`finetune_48`, PT 2.6) → localize/optimize face patches → apply patches → optional `dsgn_offline` replay in Autoware → observe planning/control.
 
@@ -107,20 +101,16 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 └── notes26/                             # findings and runbooks
 ```
 
-**Map:** Nishi-Shinjuku (`data/maps/nishishinjuku_autoware_map/`). MGRS grid `54SUE`. Elevation ~40.9 m — never use z=0.
-
 ### DSGN repos (separate forks, not part of this repo)
 
 `src/dsgn_offline/` and `external/DSGN_custom/` are **independent git checkouts**, listed in `.gitignore` so this repo does not track them as nested submodules or ghost folders.
 
-| Path | Role | Where to commit changes |
-|------|------|-------------------------|
-| `external/DSGN_custom/` | Train/run DSGN; write detection `.txt` files | Your fork: [adricalm/DSGN_custom](https://github.com/adricalm/DSGN_custom) (`upstream` = Arka’s repo) |
-| `src/dsgn_offline/` | Publish offline detections into Autoware (`/perception/object_recognition/detection/objects`) | Your fork: [adricalm/dsgn_offline](https://github.com/adricalm/dsgn_offline) (`upstream` = Arka’s repo) |
+| Path | Role | Git remote |
+|------|------|------------|
+| `external/DSGN_custom/` | Train/run DSGN; write detection `.txt` files | [adricalm/DSGN_custom](https://github.com/adricalm/DSGN_custom) (`upstream` = Arka’s repo) |
+| `src/dsgn_offline/` | Publish offline detections into Autoware (`/perception/object_recognition/detection/objects`) | [adricalm/dsgn_offline](https://github.com/adricalm/dsgn_offline) (`upstream` = Arka’s repo) |
 
-**Why:** keeps Autoware integration (`summer26`) separate from ML/ROS code you will modify; avoids accidental commits of large datasets or model weights; preserves a clear diff against the prior baseline via `upstream`.
-
-**Remotes (both nested repos):** `origin` = your fork (push here); `upstream` = [DF-Autoware-AWSIM](https://github.com/DF-Autoware-AWSIM) (pull Arka’s updates). If you cloned Arka’s repo directly, repoint before your first commit:
+**Remotes (both nested repos):** clone from the adricalm URLs above (`origin`). Keep `upstream` = [DF-Autoware-AWSIM](https://github.com/DF-Autoware-AWSIM) to pull Arka’s baseline. If the checkout came from Arka’s repo directly, repoint remotes before committing:
 
 ```bash
 cd external/DSGN_custom   # or src/dsgn_offline

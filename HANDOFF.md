@@ -20,7 +20,7 @@ git clone git@github.com:adricalm/dsgn_offline.git src/dsgn_offline
 
 Use branch **`main`** on the glue repo and on `dsgn_offline`. Use **`master`** on `DSGN_custom`. Ignore branch `dsgn2` on the glue repo.
 
-Both forks have `origin` = your/adria fork and should keep `upstream` = [DF-Autoware-AWSIM](https://github.com/orgs/DF-Autoware-AWSIM/repositories) if you need Arka’s updates.
+Both nested repos should have `origin` pointing at the adricalm URLs above and `upstream` = [DF-Autoware-AWSIM](https://github.com/orgs/DF-Autoware-AWSIM/repositories) if Arka’s baseline is needed.
 
 ## Data link (not in git)
 
