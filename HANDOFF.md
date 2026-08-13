@@ -6,11 +6,11 @@ Short orientation for setting up this workspace. Detailed commands live in [`REA
 
 | Repo | Role | Clone into |
 |------|------|------------|
-| [adricalm/adversarial-attacks-autonomous-driving](https://github.com/adricalm/adversarial-attacks-autonomous-driving) | Glue repo (scripts, Autoware overrides, stereo mod, patch pipeline) | `~/summer26` (this repo) |
-| [adricalm/DSGN_custom](https://github.com/adricalm/DSGN_custom) | DSGN train / inference | `~/summer26/external/DSGN_custom` |
+| [adricalm/adversarial-attacks-autonomous-driving](https://github.com/adricalm/adversarial-attacks-autonomous-driving) | Central repo, contains the others as subrepos (scripts, Autoware overrides, awsim stereo modification, patch pipeline) | `~/summer26` (this repo) |
+| [adricalm/DSGN_custom](https://github.com/adricalm/DSGN_custom) | Official DSGN train / inference | `~/summer26/external/DSGN_custom` |
 | [adricalm/dsgn_offline](https://github.com/adricalm/dsgn_offline) | ROS 2 node that replays KITTI detections into Autoware | `~/summer26/src/dsgn_offline` |
 
-After cloning the glue repo:
+After cloning the central repo:
 
 ```bash
 cd ~/summer26
@@ -18,7 +18,7 @@ git clone git@github.com:adricalm/DSGN_custom.git external/DSGN_custom
 git clone git@github.com:adricalm/dsgn_offline.git src/dsgn_offline
 ```
 
-Use branch **`main`** on the glue repo and on `dsgn_offline`. Use **`master`** on `DSGN_custom`. Ignore branch `dsgn2` on the glue repo.
+Use branch **`main`** on the central repo and on `dsgn_offline`. Use **`master`** on `DSGN_custom`. Ignore branch `dsgn2` on the central repo.
 
 Both nested repos should have `origin` pointing at the adricalm URLs above and `upstream` = [DF-Autoware-AWSIM](https://github.com/orgs/DF-Autoware-AWSIM/repositories) if Arka’s baseline is needed.
 

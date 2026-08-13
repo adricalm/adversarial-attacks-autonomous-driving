@@ -1,4 +1,4 @@
-# summer26 — Autoware + AWSIM adversarial-driving research stack
+## Evaluating Adversarial Physical Attacks on Autoware + AWSIM Autonomus Vehicle stack
 
 Research stack for **visual/physical adversarial patches** against a stereo 3D detector (DSGN), then measuring impact on Autoware driving in AWSIM.
 
@@ -10,7 +10,7 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 
 ## Quick start
 
-1. Clone this glue repo on **`main`** (ignore stale branch `dsgn2`).
+1. Clone this central repo on **`main`** (ignore stale branch `dsgn2`).
 2. Clone the two forks into the expected paths (they are **not** submodules):
 
    ```bash
@@ -417,7 +417,7 @@ See `dsgn/` for datasets, checkpoints, and detection outputs; DSGN forks above f
 
 ## External references
 
-- Glue repo: [adricalm/adversarial-attacks-autonomous-driving](https://github.com/adricalm/adversarial-attacks-autonomous-driving)
+- Central repo: [adricalm/adversarial-attacks-autonomous-driving](https://github.com/adricalm/adversarial-attacks-autonomous-driving)
 - Autoware pin: [`notes26/autoware_pin.md`](notes26/autoware_pin.md) (Docker image only; no local checkout)
 - DSGN stereo detector: `external/DSGN_custom/` — fork and commit separately
 - DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately

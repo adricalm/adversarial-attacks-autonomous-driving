@@ -1,7 +1,7 @@
 # Patch optimization walkthrough
 
 Plain-language order of the scripts under `scripts/patch_optimization/`.  
-Run from the glue-repo root (`~/summer26`). Use the DSGN venv for anything that loads the network:
+Run from the central-repo root (`~/summer26`). Use the DSGN venv for anything that loads the network:
 
 ```bash
 # once
