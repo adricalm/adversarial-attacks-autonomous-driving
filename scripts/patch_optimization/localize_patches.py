@@ -24,15 +24,6 @@ Examples
     --calib dsgn/datasets/arka/dsgn_awsim/testing_offline/calib \\
     --output dsgn/datasets/adria/1.patch_optimization/patches_localized.csv \\
     --box-convention kitti --selection closest
-
-  # Preview overlays on a few frames
-  python3 scripts/patch_optimization/localize_patches.py \\
-    --detections src/dsgn_offline/resource/awsim_output_offline_no_finetune \\
-    --calib dsgn/datasets/arka/dsgn_awsim/testing_offline/calib \\
-    --images dsgn/datasets/arka/dsgn_awsim/testing_offline/image_2 \\
-    --output dsgn/datasets/adria/1.patch_optimization/patches_localized.csv \\
-    --preview-dir dsgn/datasets/adria/1.patch_optimization/preview \\
-    --frames 100,150,200
 """
 from __future__ import annotations
 
@@ -43,13 +34,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-
-try:
-    import cv2
-
-    HAS_CV2 = True
-except ImportError:
-    HAS_CV2 = False
 
 # Vertical faces as corner-index quads (order matches visualize_dsgn_detections).
 # KITTI object frame: x=length, y=up(-), z=width. AWSIM: z=length, y=height, x=width.
@@ -365,72 +349,6 @@ def write_csv(path: Path, rows: list[PatchRow]) -> None:
             )
 
 
-def draw_preview(
-    image_path: Path,
-    rows: list[PatchRow],
-    dets: list[Detection],
-    p2: np.ndarray,
-    convention: str,
-    out_path: Path,
-    preview_area_frac: float | None,
-) -> None:
-    if not HAS_CV2:
-        raise RuntimeError("cv2 required for --preview-dir")
-    img = cv2.imread(str(image_path))
-    if img is None:
-        raise RuntimeError(f"failed to read {image_path}")
-
-    for det in dets:
-        if det.type.lower() != "car":
-            continue
-        corners = compute_box_3d(det.dimensions, det.location, det.rotation_y, convention)
-        pts = project_to_image(corners, p2)
-        if np.any(~np.isfinite(pts)):
-            continue
-        qs = pts.astype(np.int32).T
-        for k in range(4):
-            i, j = k, (k + 1) % 4
-            cv2.line(img, tuple(qs[i]), tuple(qs[j]), (0, 200, 0), 1)
-            cv2.line(img, tuple(qs[i + 4]), tuple(qs[j + 4]), (0, 200, 0), 1)
-            cv2.line(img, tuple(qs[i]), tuple(qs[i + 4]), (0, 200, 0), 1)
-
-    for r in rows:
-        if preview_area_frac is None:
-            half = r.size // 2
-            x0 = int(round(r.center_x)) - half
-            y0 = int(round(r.center_y)) - half
-            x1, y1 = x0 + r.size, y0 + r.size
-        else:
-            scale = float(np.sqrt(max(preview_area_frac, 1e-6)))
-            width = max(1, int(round((r.x1 - r.x0) * scale)))
-            height = max(1, int(round((r.y1 - r.y0) * scale)))
-            face_cx = 0.5 * (r.x0 + r.x1)
-            face_cy = 0.5 * (r.y0 + r.y1)
-            x0 = int(round(face_cx - width / 2.0))
-            y0 = int(round(face_cy - height / 2.0))
-            x1, y1 = x0 + width, y0 + height
-        cv2.rectangle(img, (x0, y0), (x1, y1), (0, 0, 255), 2)
-        cv2.drawMarker(
-            img,
-            (int(round(r.center_x)), int(round(r.center_y))),
-            (0, 255, 255),
-            markerType=cv2.MARKER_CROSS,
-            markerSize=12,
-            thickness=1,
-        )
-        # Face AABB used for sizing.
-        cv2.rectangle(
-            img,
-            (int(round(r.x0)), int(round(r.y0))),
-            (int(round(r.x1)), int(round(r.y1))),
-            (255, 128, 0),
-            1,
-        )
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(out_path), img)
-
-
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument(
@@ -490,25 +408,6 @@ def main() -> int:
     p.add_argument("--image-width", type=int, default=IMAGE_WIDTH)
     p.add_argument("--image-height", type=int, default=IMAGE_HEIGHT)
     p.add_argument("--frames", default=None, help="e.g. 100-150 or 100,150,200")
-    p.add_argument(
-        "--images",
-        type=Path,
-        default=None,
-        help="image_2/ for optional preview overlays",
-    )
-    p.add_argument(
-        "--preview-dir",
-        type=Path,
-        default=None,
-        help="If set (and --images given), write per-frame preview PNGs",
-    )
-    p.add_argument(
-        "--preview-area-frac",
-        type=float,
-        default=None,
-        help="Draw the face-aspect-ratio rectangle used by --shape face at this "
-        "area fraction (for example 0.50). Without it, draw the legacy CSV square.",
-    )
     args = p.parse_args()
 
     det_dir: Path = args.detections
@@ -587,22 +486,6 @@ def main() -> int:
             candidates, args.selection, args.max_depth, max_center_y
         )
         rows.extend(frame_rows)
-
-        if args.preview_dir is not None:
-            if args.images is None:
-                print("error: --preview-dir requires --images", file=sys.stderr)
-                return 1
-            img_path = args.images / f"{frame}.png"
-            if img_path.is_file() and frame_rows:
-                draw_preview(
-                    img_path,
-                    frame_rows,
-                    dets,
-                    p2,
-                    args.box_convention,
-                    args.preview_dir / f"{frame}_patch_loc.png",
-                    args.preview_area_frac,
-                )
 
     write_csv(args.output, rows)
     print(f"Wrote {len(rows)} patches → {args.output}")
