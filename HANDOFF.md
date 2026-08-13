@@ -1,6 +1,6 @@
-# Handoff — next intern
+# Handoff
 
-Short orientation. Detailed commands live in [`README.md`](README.md) and [`notes26/`](notes26/).
+Short orientation for setting up this workspace. Detailed commands live in [`README.md`](README.md) and [`notes26/`](notes26/).
 
 ## Repos (code)
 
@@ -18,13 +18,13 @@ git clone git@github.com:adricalm/DSGN_custom.git external/DSGN_custom
 git clone git@github.com:adricalm/dsgn_offline.git src/dsgn_offline
 ```
 
-Use branch **`main`** on the glue repo and on `dsgn_offline`. Use **`master`** on `DSGN_custom`. Ignore branch `dsgn2` on the glue repo — it is stale.
+Use branch **`main`** on the glue repo and on `dsgn_offline`. Use **`master`** on `DSGN_custom`. Ignore branch `dsgn2` on the glue repo.
 
 Both forks have `origin` = your/adria fork and should keep `upstream` = [DF-Autoware-AWSIM](https://github.com/orgs/DF-Autoware-AWSIM/repositories) if you need Arka’s updates.
 
 ## Data link (not in git)
 
-**Shared drive / folder:** _TODO: _
+**Shared drive / folder:** _TODO: drive link to data here_
 
 Copy the archive contents so the tree matches the table below (paths relative to `~/summer26`).
 
@@ -63,7 +63,7 @@ test -f "$ROOT/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar"
 
 | Item | Value |
 |------|-------|
-| Host | Same lab Ubuntu machine style as this internship (NVIDIA GPU + Docker GPU access) |
+| Host | Lab Ubuntu machine with NVIDIA GPU + Docker GPU access |
 | Project root | `~/summer26` (or set `ROOT`) |
 | Docker image | `ghcr.io/autowarefoundation/autoware:universe-cuda-humble` |
 | AWSIM | Labs **v1.6.1** under `data/awsim/extracted/` |

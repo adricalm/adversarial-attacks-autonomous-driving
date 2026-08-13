@@ -1,14 +1,14 @@
 # summer26 — Autoware + AWSIM adversarial-driving research stack
 
-KTH summer internship project: **visual/physical adversarial patches** against a stereo 3D detector (DSGN), then measure impact on Autoware driving in AWSIM.
+Research stack for **visual/physical adversarial patches** against a stereo 3D detector (DSGN), then measuring impact on Autoware driving in AWSIM.
 
 **Stack:** AWSIM + Autoware Universe + optional RViz, ROS 2 Humble, Docker with host networking.
 
-**Start here if you are the next intern:** [`HANDOFF.md`](HANDOFF.md) (repos, data link, first runs). Detailed commands stay in this README and in [`notes26/`](notes26/).
+**Start here:** [`HANDOFF.md`](HANDOFF.md) (repos, data link, first runs). Detailed commands stay in this README and in [`notes26/`](notes26/).
 
 ---
 
-## Quick start (new person)
+## Quick start
 
 1. Clone this glue repo on **`main`** (ignore stale branch `dsgn2`).
 2. Clone the two forks into the expected paths (they are **not** submodules):
@@ -111,7 +111,7 @@ KTH summer internship project: **visual/physical adversarial patches** against a
 
 ### DSGN repos (separate forks, not part of this repo)
 
-`src/dsgn_offline/` and `external/DSGN_custom/` are **independent git checkouts** from the prior intern’s work, listed in `.gitignore` so this repo does not track them as nested submodules or ghost folders.
+`src/dsgn_offline/` and `external/DSGN_custom/` are **independent git checkouts**, listed in `.gitignore` so this repo does not track them as nested submodules or ghost folders.
 
 | Path | Role | Where to commit changes |
 |------|------|-------------------------|
@@ -405,7 +405,7 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 
 | Doc | Purpose |
 |-----|---------|
-| [`HANDOFF.md`](HANDOFF.md) | Successor orientation: repos, data link, first runs |
+| [`HANDOFF.md`](HANDOFF.md) | Setup orientation: repos, data link, first runs |
 | [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md) | Minimal AWSIM + Autoware startup |
 | [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md) | Patch localize → optimize → apply → eval order |
 | [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md) | Stereo camera mod on the AWSIM **binary**; launch gotchas |
@@ -417,7 +417,7 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 
 ## Research direction
 
-1. Inject **visual/physical adversarial patches** into the perception pipeline (DSGN-based setup from prior intern work).
+1. Inject **visual/physical adversarial patches** into the perception pipeline (DSGN-based setup).
 2. Measure whether perception errors affect **driving behavior** (planning, control).
 3. Evaluate **defense / recovery** methods.
 
