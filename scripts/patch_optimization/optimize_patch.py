@@ -4,17 +4,10 @@
 Always loads clean stereo images and pastes the current shared patch in-graph.
 Does not rewrite datasets on disk.
 
-Loss (training), selected by --loss:
-  prob (default)  L = LSE_tau({ sigmoid(logit_q) : q in Q(B_clean) })
-                  Q = top --max-matches Car proposals above --score-thresh at
-                  BEV cells within --match-radius of the clean closest car.
-                  Defaults thresh=0.33, max_matches=3. Note the gate means a
-                  frame contributes no gradient once it drops below it.
-  logit           L = LSE_tau({ logit_q : all Car anchors in the radius }),
-                  ungated, optionally floored by --logit-clamp.
+Loss: LSE_tau({ logit_q : all Car anchors within --match-radius of the target }),
+optionally floored by --logit-clamp.
 
-Reported max_s / val_max_s are always the ungated max Car probability, so they
-stay meaningful after the gate empties.
+Reported max_s / val_max_s are the max Car probability among those anchors.
 
 Geometry, selected by --shape:
   square (default)  the CSV `size` square at the CSV centre.
@@ -71,6 +64,7 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 FULL_W, FULL_H = 1920, 1080
 DOWNSCALE = 0.5
 CAR_CLASS_IDX = 1  # labels are 1=Ped, 2=Car, 3=Cyclist → channel index class-1
+VIS_TOP_K = 3  # proposals drawn on --vis-every / --vis-val-max overlays
 
 
 @dataclass
@@ -117,13 +111,9 @@ class RunOpts:
       "step"  w = near_boost if depth_m <= near_thresh else 1.0.
     """
 
-    loss: str = "prob"
-    temperature: float = 0.2
-    logit_temperature: float = 1.0
+    temperature: float = 1.0
     logit_clamp: float | None = None
     match_radius: float = 2.0
-    score_thresh: float = 0.33
-    max_matches: int = 3
     shape: str = "square"
     area_frac: float = 0.23
     resample: str = "bilinear"
@@ -137,8 +127,8 @@ class RunOpts:
 
 
 @dataclass
-class MatchedProposals:
-    """Top-k local Car proposals used by the evasion loss."""
+class CarProposals:
+    """Top-k local Car proposals (visualization only)."""
 
     scores: torch.Tensor  # (k,)
     loc_idx: torch.Tensor  # (k,) int64 into flattened BEV
@@ -342,7 +332,7 @@ def prepare_stereo_pair(
     return left_n, right_n, image_size
 
 
-def matched_car_scores(
+def top_car_proposals(
     bbox_cls: torch.Tensor,
     locations_bev: torch.Tensor,
     loc_x: float,
@@ -350,16 +340,10 @@ def matched_car_scores(
     radius: float,
     num_classes: int,
     num_angles: int,
-    score_thresh: float,
-    max_matches: int,
+    k: int,
     car_idx: int = CAR_CLASS_IDX,
-) -> MatchedProposals:
-    """Return up to `max_matches` strong Car proposals near (loc_x, loc_z).
-
-    Collects raw proposal scores at BEV cells within `radius`, keeps those
-    >= `score_thresh`, then returns the top-k (scores + BEV/angle indices).
-    """
-    # bbox_cls: (N, A*C, H, W) with class4angles; channel layout angle-major, class-fast.
+) -> CarProposals:
+    """Return up to `k` strongest Car proposals near (loc_x, loc_z) for overlays."""
     n, c, h, w = bbox_cls.shape
     assert n == 1
     assert c == num_angles * num_classes, f"bbox_cls channels {c} != {num_angles}*{num_classes}"
@@ -374,35 +358,29 @@ def matched_car_scores(
     if mask.any():
         loc_ids = mask.nonzero(as_tuple=False).squeeze(1)
     else:
-        # Target may sit just outside the BEV grid (e.g. z > ~40 m).
         _, nn_idx = torch.topk(dist, k=min(64, dist.numel()), largest=False)
         loc_ids = nn_idx
 
-    # (n_loc, A) → flat; flat i maps to (loc_ids[i // A], i % A)
     local = scores[0, loc_ids, :, car_idx]
     flat = local.reshape(-1)
-    empty = MatchedProposals(
+    empty = CarProposals(
         scores=flat.new_zeros((0,)),
         loc_idx=loc_ids.new_zeros((0,)),
         angle_idx=loc_ids.new_zeros((0,)),
     )
-    keep = flat >= score_thresh
-    if not keep.any() or max_matches <= 0:
+    if flat.numel() == 0 or k <= 0:
         return empty
 
-    flat_kept = flat[keep]
-    kept_i = torch.arange(flat.numel(), device=flat.device)[keep]
-    k = min(int(max_matches), int(flat_kept.numel()))
-    top_vals, top_pos = torch.topk(flat_kept, k=k)
-    sel = kept_i[top_pos]
-    loc_idx = loc_ids[sel // num_angles]
-    angle_idx = sel % num_angles
-    return MatchedProposals(scores=top_vals, loc_idx=loc_idx, angle_idx=angle_idx)
+    k = min(int(k), int(flat.numel()))
+    top_vals, top_pos = torch.topk(flat, k=k)
+    loc_idx = loc_ids[top_pos // num_angles]
+    angle_idx = top_pos % num_angles
+    return CarProposals(scores=top_vals, loc_idx=loc_idx, angle_idx=angle_idx)
 
 
 def decode_matched_boxes2d(
     bbox_reg: torch.Tensor,
-    matched: MatchedProposals,
+    matched: CarProposals,
     locations_bev: torch.Tensor,
     cfg,
     calib_p: np.ndarray,
@@ -482,7 +460,7 @@ def save_match_visualization(
     draw.rectangle([px0, py0, px0 + pw, py0 + ph], outline=(0, 255, 255), width=3)
     draw.text((px0, max(0, py0 - 14)), f"patch {pw}x{ph}", fill=(0, 255, 255), font=font)
 
-    # Top-k loss proposals (red / orange / yellow by rank).
+    # Top proposals by score (red / orange / yellow by rank).
     colors = [(255, 40, 40), (255, 140, 0), (255, 220, 0)]
     for i, (x0, y0, x1, y1, score) in enumerate(boxes):
         color = colors[i % len(colors)]
@@ -554,11 +532,19 @@ def build_epoch_order(frames: list[FrameSpec], opts: RunOpts) -> list[FrameSpec]
     return [frames[int(i)] for i in idx]
 
 
-def lse_loss(scores: torch.Tensor, temperature: float) -> torch.Tensor:
-    if scores.numel() == 0:
-        return scores.new_zeros(())
+def evasion_loss(
+    logits: torch.Tensor, temperature: float, clamp_min: float | None
+) -> torch.Tensor:
+    """LSE over Car logits within the match radius.
+
+    `clamp_min` floors each logit so anchors already driven far negative stop
+    absorbing the gradient budget; None leaves logits unclamped.
+    """
+    if logits.numel() == 0:
+        return logits.new_zeros(())
     t = max(float(temperature), 1e-6)
-    return t * torch.logsumexp(scores / t, dim=0)
+    x = logits if clamp_min is None else logits.clamp(min=float(clamp_min))
+    return t * torch.logsumexp(x / t, dim=0)
 
 
 def car_logits_in_radius(
@@ -571,7 +557,7 @@ def car_logits_in_radius(
     num_angles: int,
     car_idx: int = CAR_CLASS_IDX,
 ) -> torch.Tensor:
-    """Every Car class logit at BEV cells within `radius`, ungated."""
+    """Every Car class logit at BEV cells within `radius`."""
     n, c, h, w = bbox_cls.shape
     assert c == num_angles * num_classes, f"bbox_cls channels {c} != {num_angles}*{num_classes}"
     logits = (
@@ -586,22 +572,6 @@ def car_logits_in_radius(
     else:
         _, loc_ids = torch.topk(dist, k=min(64, dist.numel()), largest=False)
     return logits[0, loc_ids, :, car_idx].reshape(-1)
-
-
-def logit_lse_loss(
-    logits: torch.Tensor, temperature: float, clamp_min: float | None
-) -> torch.Tensor:
-    """Ungated LSE in logit space.
-
-    `clamp_min` floors each logit so anchors already driven far negative stop
-    absorbing the gradient budget; None reproduces the unclamped form the
-    capacity tests actually ran.
-    """
-    if logits.numel() == 0:
-        return logits.new_zeros(())
-    t = max(float(temperature), 1e-6)
-    x = logits if clamp_min is None else logits.clamp(min=float(clamp_min))
-    return t * torch.logsumexp(x / t, dim=0)
 
 
 def load_model(cfg, ckpt_path: Path, device: torch.device) -> nn.Module:
@@ -726,13 +696,7 @@ def run_frame(
     log_nms: bool = False,
     vis_path: Path | None = None,
 ) -> tuple[torch.Tensor, float, int, int, float]:
-    """Returns (loss, max_car_prob, n_in_loss, n_nms_match, nms_max_s).
-
-    `max_car_prob` is ungated: the strongest local Car probability whether or
-    not the objective is currently looking at it. The gated version reads 0.0
-    once everything drops under --score-thresh, which flatters the log exactly
-    when the attack starts working.
-    """
+    """Returns (loss, max_car_prob, n_anchors, n_nms_match, nms_max_s)."""
     left_path = images_root / "image_2" / f"{spec.frame}.png"
     right_path = images_root / "image_3" / f"{spec.frame}.png"
     calib_path = images_root / "calib" / f"{spec.frame}.txt"
@@ -781,24 +745,8 @@ def run_frame(
     with torch.no_grad():
         max_s = float(logits_all.sigmoid().max().item()) if logits_all.numel() else 0.0
 
-    matched: MatchedProposals | None = None
-    if opts.loss == "logit":
-        loss = logit_lse_loss(logits_all, opts.logit_temperature, opts.logit_clamp)
-        n_in_loss = int(logits_all.numel())
-    else:
-        matched = matched_car_scores(
-            outputs["bbox_cls"],
-            locations_bev,
-            spec.loc_x,
-            spec.loc_z,
-            opts.match_radius,
-            num_classes=int(cfg.num_classes),
-            num_angles=int(cfg.num_angles),
-            score_thresh=opts.score_thresh,
-            max_matches=opts.max_matches,
-        )
-        loss = lse_loss(matched.scores, opts.temperature)
-        n_in_loss = matched.n
+    loss = evasion_loss(logits_all, opts.temperature, opts.logit_clamp)
+    n_anchors = int(logits_all.numel())
 
     n_nms, nms_max = 0, 0.0
     if log_nms:
@@ -806,25 +754,23 @@ def run_frame(
             outputs, cfg, image_size, calib.P, spec.loc_x, spec.loc_z, opts.match_radius
         )
     if vis_path is not None:
-        if matched is None:
-            matched = matched_car_scores(
-                outputs["bbox_cls"],
-                locations_bev,
-                spec.loc_x,
-                spec.loc_z,
-                opts.match_radius,
-                num_classes=int(cfg.num_classes),
-                num_angles=int(cfg.num_angles),
-                score_thresh=opts.score_thresh,
-                max_matches=opts.max_matches,
-            )
+        proposals = top_car_proposals(
+            outputs["bbox_cls"],
+            locations_bev,
+            spec.loc_x,
+            spec.loc_z,
+            opts.match_radius,
+            num_classes=int(cfg.num_classes),
+            num_angles=int(cfg.num_angles),
+            k=VIS_TOP_K,
+        )
         boxes = decode_matched_boxes2d(
-            outputs["bbox_reg"], matched, locations_bev, cfg, calib.P
+            outputs["bbox_reg"], proposals, locations_bev, cfg, calib.P
         )
         save_match_visualization(
             vis_path, left, p, spec, boxes, f_u, baseline, opts, resample
         )
-    return loss, max_s, n_in_loss, n_nms, nms_max
+    return loss, max_s, n_anchors, n_nms, nms_max
 
 
 class Tee:
@@ -1073,28 +1019,13 @@ def parse_args() -> argparse.Namespace:
         "old .pt/.png with no stored epoch metadata. Ignored when the "
         "checkpoint already has an 'epoch' field. Next loop starts at start-epoch+1.",
     )
-    p.add_argument("--temperature", type=float, default=0.2, help="LSE temperature")
-    p.add_argument(
-        "--loss",
-        choices=("prob", "logit"),
-        default="prob",
-        help="'prob' (default) is the original gated top-k probability LSE. "
-        "'logit' is the ungated LSE over every local Car logit, which the "
-        "per-frame capacity tests used.",
-    )
-    p.add_argument(
-        "--logit-temperature",
-        type=float,
-        default=1.0,
-        help="LSE temperature for --loss logit",
-    )
+    p.add_argument("--temperature", type=float, default=1.0, help="LSE temperature")
     p.add_argument(
         "--logit-clamp",
         type=float,
         default=None,
-        help="Floor each logit at this value under --loss logit (e.g. -2.0) so "
-        "already-dead anchors stop absorbing gradient. Unset = unclamped, which "
-        "is the form the capacity tests validated.",
+        help="Floor each logit at this value (e.g. -2.0) so already-dead anchors "
+        "stop absorbing gradient. Unset = unclamped.",
     )
     p.add_argument(
         "--shape",
@@ -1145,18 +1076,6 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--match-radius", type=float, default=2.0, help="BEV match radius (m)")
     p.add_argument(
-        "--score-thresh",
-        type=float,
-        default=0.33,
-        help="Min proposal score to keep (DSGN PRE_NMS_THRESH default)",
-    )
-    p.add_argument(
-        "--max-matches",
-        type=int,
-        default=3,
-        help="Keep at most this many strongest local proposals for the loss",
-    )
-    p.add_argument(
         "--log-nms",
         action="store_true",
         help="Also log post-NMS matched Car count/score (val + progress prints)",
@@ -1165,7 +1084,7 @@ def parse_args() -> argparse.Namespace:
         "--vis-every",
         type=int,
         default=0,
-        help="Save top-k proposal overlays every N train steps (0=disable, default). "
+        help="Save proposal overlays every N train steps (0=disable, default). "
         "Also always saves step 1 and the last step of each epoch when >0.",
     )
     p.add_argument(
@@ -1338,13 +1257,9 @@ def main() -> int:
         train_frames, val_frames = split_frames(frames, args.val_frac, mode=args.split)
     n_inits = 1 if args.resume is not None else max(1, int(args.n_inits))
     opts = RunOpts(
-        loss=args.loss,
         temperature=args.temperature,
-        logit_temperature=args.logit_temperature,
         logit_clamp=args.logit_clamp,
         match_radius=args.match_radius,
-        score_thresh=args.score_thresh,
-        max_matches=args.max_matches,
         shape=args.shape,
         area_frac=args.area_frac,
         resample=args.resample,
@@ -1364,7 +1279,7 @@ def main() -> int:
             if args.val_csv is not None
             else f"split={args.split} val_frac={args.val_frac} | "
         )
-        + f"score_thresh={args.score_thresh} max_matches={args.max_matches} | "
+        + f"match_radius={args.match_radius} | "
         + f"init={args.init if args.resume is None else 'resume'} n_inits={n_inits}"
     )
     near_desc = opts.near_weight
@@ -1377,21 +1292,12 @@ def main() -> int:
     if opts.near_weight != "none":
         near_desc += f" via={opts.near_emphasis}"
     print(
-        f"loss={opts.loss} "
-        + (
-            f"logit_tau={opts.logit_temperature} clamp={opts.logit_clamp} "
-            if opts.loss == "logit"
-            else f"tau={opts.temperature} "
-        )
-        + f"| shape={opts.shape}"
+        f"loss=LSE(logit) tau={opts.temperature}"
+        + (f" clamp={opts.logit_clamp}" if opts.logit_clamp is not None else "")
+        + f" | shape={opts.shape}"
         + (f" area_frac={opts.area_frac}" if opts.shape == "face" else "")
         + f" | near_weight={near_desc}"
         + f" | grad_accum={accum} resample={opts.resample} quantize={opts.quantize}"
-    )
-    print(
-        "NOTE: max_s/val_max_s are ungated max Car probability, so they no "
-        "longer read 0 when the gate empties; earlier runs reported the gated "
-        "value and are therefore optimistic by comparison."
     )
 
     model = load_model(cfg, args.loadmodel, device)
@@ -1510,20 +1416,19 @@ def main() -> int:
                 vis_path = None
                 if do_vis:
                     vis_path = epoch_vis / "train" / f"{spec.frame}_step{i:04d}.png"
-                loss, max_s, n_m, n_nms, nms_max = _run(
+                loss, max_s, n_anchors, n_nms, nms_max = _run(
                     spec, log_nms=do_log, vis_path=vis_path
                 )
-                # Record the score even when the objective saw nothing, so a
-                # frame going quiet cannot masquerade as a frame at zero.
+                # Record the score even when no anchors fall in radius.
                 train_max.append(max_s)
                 if spec.depth_m <= opts.near_thresh:
                     train_near_max.append(max_s)
                 else:
                     train_far_max.append(max_s)
-                if n_m == 0 or not loss.requires_grad:
+                if n_anchors == 0 or not loss.requires_grad:
                     # No grad path means the patch never reached the image for
                     # this frame; backward() would raise instead of skipping.
-                    if n_m != 0:
+                    if n_anchors != 0:
                         n_nograd += 1
                     train_losses.append(0.0)
                     n_skip += 1
@@ -1554,7 +1459,7 @@ def main() -> int:
                         f"  epoch {epoch} [{i}/{len(order)}] frame={spec.frame} "
                         f"depth={spec.depth_m:.1f}m{w_str} "
                         f"loss={train_losses[-1]:.4f} max_s={train_max[-1]:.4f} "
-                        f"matched={n_m}{extra}"
+                        f"anchors={n_anchors}{extra}"
                     )
 
             val_losses: list[float] = []
@@ -1567,10 +1472,10 @@ def main() -> int:
                     vis_path = None
                     if args.vis_val_max > 0 and vi < args.vis_val_max:
                         vis_path = epoch_vis / "val" / f"{spec.frame}.png"
-                    loss, max_s, n_m, n_nms, nms_max = _run(
+                    loss, max_s, n_anchors, n_nms, nms_max = _run(
                         spec, log_nms=args.log_nms, vis_path=vis_path
                     )
-                    val_losses.append(float(loss.item()) if n_m else 0.0)
+                    val_losses.append(float(loss.item()) if n_anchors else 0.0)
                     val_max.append(max_s)
                     if spec.depth_m <= opts.near_thresh:
                         val_near_max.append(max_s)
