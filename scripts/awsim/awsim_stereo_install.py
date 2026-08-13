@@ -13,7 +13,7 @@ Only these two text files are touched. `--uninstall` restores them byte-for-byte
 the .orig backups taken on first install, so the modded tree returns to stock.
 
 Usage:
-  scripts/awsim_stereo_install.py [--uninstall] [--game DIR]
+  scripts/awsim/awsim_stereo_install.py [--uninstall] [--game DIR]
 """
 
 import argparse
@@ -57,7 +57,7 @@ def restore(path: Path) -> bool:
 def install(data_dir: Path) -> None:
     managed = data_dir / "Managed" / ASSEMBLY_DLL
     if not managed.exists():
-        sys.exit(f"ERROR: {managed} missing. Run scripts/awsim_stereo_build.sh first.")
+        sys.exit(f"ERROR: {managed} missing. Run scripts/awsim/awsim_stereo_build.sh first.")
 
     asm_path = data_dir / "ScriptingAssemblies.json"
     backup_once(asm_path)

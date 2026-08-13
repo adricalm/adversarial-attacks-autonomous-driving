@@ -18,8 +18,8 @@ Validated remap (see label_convention_probe):
   alpha = wrap(ry - atan2(x, z))
 
 Usage (host):
-  python scripts/dsgn_transform_label.py
-  python scripts/dsgn_transform_label.py \\
+  python scripts/dsgn/dsgn_transform_label.py
+  python scripts/dsgn/dsgn_transform_label.py \\
     --labels_path <awsim_format_label_2_dir> \\
     --save_path  ~/summer26/dsgn/datasets/adria/training_kitti_labels/label_2
 

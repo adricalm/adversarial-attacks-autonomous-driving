@@ -10,7 +10,7 @@
 # Do NOT `source /opt/ros/humble/setup.bash` before launching AWSIM.
 #
 # Usage:
-#   scripts/awsim_launch.sh [pristine|modded] [extra awsim args...]
+#   scripts/awsim/awsim_launch.sh [pristine|modded] [extra awsim args...]
 set -euo pipefail
 
 BUILD="${1:-pristine}"; shift || true
@@ -63,4 +63,4 @@ echo "build     : $BUILD ($SUBDIR)"
 echo "log       : $HOME/summer26/logs/$LOG"
 echo
 echo "Scene load takes ~60-75 s. Verify with:"
-echo "  scripts/awsim_verify.sh $NAME"
+echo "  scripts/awsim/awsim_verify.sh $NAME"

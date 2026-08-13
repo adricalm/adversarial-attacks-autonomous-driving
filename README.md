@@ -1,22 +1,29 @@
 # summer26 — Autoware + AWSIM adversarial-driving research stack
 
-KTH summer internship project evaluating **visual/physical adversarial attacks and defenses** in autonomous-driving simulation.
+KTH summer internship project: **visual/physical adversarial patches** against a stereo 3D detector (DSGN), then measure impact on Autoware driving in AWSIM.
 
-**Stack:** AWSIM (simulator) + Autoware Universe (perception, localization, planning) + RViz, over ROS 2 Humble, all inside Docker with host networking.
+**Stack:** AWSIM + Autoware Universe + optional RViz, ROS 2 Humble, Docker with host networking.
 
-> **Note:** This README is kept accurate for day-to-day work on the lab server. A shorter intern/supervisor handoff version is a later step — detailed sections below are intentional for now.
+**Start here if you are the next intern:** [`HANDOFF.md`](HANDOFF.md) (repos, data link, first runs). Detailed commands stay in this README and in [`notes26/`](notes26/).
 
 ---
 
-## For a new assistant (read this first)
+## Quick start (new person)
 
-1. **Do not assume the previous chat's blocker still applies.** Ask or infer the current state from the latest terminal output, then continue from there.
-2. **Be concise and practical.** One debugging step at a time.
-3. **Always say where a command runs:** `host` vs `inside Docker`.
-4. **Explain briefly why** each command matters — not just copy-paste.
-5. **Verify before fixing.** Use `ros2 topic info -v`, `ros2 topic echo --once`, `ros2 service type`, `ros2 interface show`, and logs. Do not guess silently.
-6. **Server caution:** This is a shared lab server. Ask before commands with global effects. Changes under `~/summer26` (user `adria`) are generally fine.
-7. **Docker no longer needs sudo** (`adria` is in the `docker` group), so agents can run containers directly. For anything else that genuinely needs `sudo`, **stop and give adria the exact command to copy-paste** — one at a time, labeled `host` vs `inside Docker`, with a one-line reason.
+1. Clone this glue repo on **`main`** (ignore stale branch `dsgn2`).
+2. Clone the two forks into the expected paths (they are **not** submodules):
+
+   ```bash
+   git clone git@github.com:adricalm/DSGN_custom.git external/DSGN_custom
+   git clone git@github.com:adricalm/dsgn_offline.git src/dsgn_offline
+   ```
+
+3. Copy non-git assets from the shared drive — see [`HANDOFF.md`](HANDOFF.md) for the link and destination folders (AWSIM, map PCDs, Autoware `ml_models`, `dsgn/datasets`, checkpoints).
+4. Bring up the stack: [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md).
+5. DSGN: prefer checkpoint **`finetune_48`** (PyTorch 2.6). Setup: `bash scripts/dsgn/dsgn_setup_venv.sh`.
+6. Patches: [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md).
+
+**Not in git:** AWSIM binaries, map pointclouds, Autoware ML models, datasets/checkpoints/detections, and the two nested forks above.
 
 ---
 
@@ -76,26 +83,26 @@ KTH summer internship project evaluating **visual/physical adversarial attacks a
 │   │   ├── ndt_scan_matcher.param.yaml
 │   │   ├── perception.launch.xml.no_detection   # disables LiDAR CenterPoint
 │   │   ├── autonomous_emergency_braking.param.yaml
-│   │   └── route_*.json, route_candidates*.json
+│   │   └── route_*.json
 │   └── awsim/                           # extracted/ + modded/ binaries
 ├── dsgn/                                # datasets, checkpoints, detections (bulk gitignored)
 │   ├── datasets/arka/dsgn_awsim/        # Arka test / testing_offline splits
-│   ├── datasets/adria/                  # training labels, recordings, patch experiments
-│   ├── datasets/recordings/             # KITTI-layout stereo recordings
+│   ├── datasets/adria/                  # patch_train / patch_test + DSGN network labels
+│   ├── datasets/recordings/             # raw stereo clips (train_frontal*, test_frontal*)
 │   ├── checkpoints/
-│   └── detections/
+│   └── detections/adria/                # train_recordings_clean, test_recordings_{clean,patched}
 ├── scripts/                             # mounted at /home/aw/scripts in Autoware
-│   ├── awsim_*.sh, drive_route_and_engage.sh, engage_*.sh
-│   ├── dsgn_*.sh / apply_*.py / record_kitti_dataset.sh
-│   ├── patch_optimization/            # localize → optimize → eval patches
-│   └── helpers/                         # optional viz, pose capture, NPC spawn, …
+│   ├── awsim/                           # launch, verify, stereo mod (host)
+│   ├── dsgn/                            # setup, train, inference, label tools (host)
+│   ├── patch_optimization/              # localize → optimize → apply → eval
+│   ├── helpers/                         # optional viz, pose capture, NPC spawn, …
+│   └── drive_route_and_engage.sh, engage_*.sh, dsgn_offline_*.sh, record_kitti_dataset.sh
 ├── src/                                 # separate git repos or small integration code
 │   ├── dsgn_offline/                    # ROS 2 offline detection publisher (fork)
 │   ├── awsim_stereo_mod/                # StereoMod C# source (built → modded AWSIM)
 │   └── awsim_to_kitti/                  # KITTI recorder used by record_kitti_dataset.sh
 ├── external/
-│   ├── DSGN_custom/                     # DSGN train/infer (fork)
-│   └── autoware/                        # upstream reference (gitignored)
+│   └── DSGN_custom/                     # DSGN train/infer (fork)
 ├── logs/                                # writable scratch (AWSIM logs); gitignored — safe to wipe
 └── notes26/                             # findings and runbooks
 ```
@@ -138,7 +145,7 @@ Offline Autoware replay: [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLIN
 
 **PyTorch note:** host venv uses PT 2.6 (L40S). Official KITTI `finetune_48` works; Arka `finetune_60` re-inference is unfaithful — prefer Arka’s precomputed detection dumps for A/B.
 
-**Useful scripts:** `dsgn_run_inference.sh`, `dsgn_train.sh`, `dsgn_transform_label.py`, `helpers/visualize_dsgn_detections.py`.
+**Useful scripts:** `dsgn/dsgn_run_inference.sh`, `dsgn/dsgn_train.sh`, `dsgn/dsgn_transform_label.py`, `helpers/visualize_dsgn_detections.py`.
 
 ---
 
@@ -278,8 +285,8 @@ a race, so it sometimes appears to work; it is much more likely to lose when Aut
 already running and loading the GPU. Always confirm with `ros2 topic list` rather than
 trusting that the window looks normal. Swap `extracted/` → `modded/` for the stereo build.
 
-**Scripted (no clicking):** `scripts/awsim_launch.sh [pristine|modded]`, then
-`scripts/awsim_verify.sh <container>`. This passes `--config` so the scene auto-loads,
+**Scripted (no clicking):** `scripts/awsim/awsim_launch.sh [pristine|modded]`, then
+`scripts/awsim/awsim_verify.sh <container>`. This passes `--config` so the scene auto-loads,
 which additionally requires scrubbing `ROS_DISTRO` to avoid a startup race that kills
 every C# publisher (`/clock`, camera, vehicle status). See
 [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md).
@@ -331,36 +338,44 @@ Healthy end state: `state: 5`, `velocity > 0`, MRM `state: 1`, `hazard emergency
 
 Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnostics under `data/autoware_data/`.
 
-### Autoware / AWSIM (inside Docker unless noted)
+### Autoware session diagnostics (`data/autoware_data/`)
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/awsim_launch.sh` | **Host:** launch AWSIM (`pristine`/`modded`) in Docker with correct env |
-| `scripts/awsim_verify.sh` | **Host:** check AWSIM topics, rates, live camera geometry |
-| `scripts/awsim_stereo_build.sh` | **Host:** compile the stereo-camera mod (`StereoMod.dll`) |
-| `scripts/awsim_stereo_install.py` | **Host:** register/`--uninstall` the mod in `modded/` |
-| `scripts/awsim_stereo_check.py` | **In Docker:** quantitative stereo pair validation |
-| `scripts/drive_route_and_engage.sh` | Clear → init pose → goal → engage |
-| `scripts/engage_autoware.sh` | **Host:** engage + motion check |
-| `scripts/record_kitti_dataset.sh` | **Host:** record KITTI-layout stereo from modded AWSIM |
-| `data/autoware_data/diagnose_stuck.sh` | Why stopped? (MRM / obstacle / loc) |
-| `data/autoware_data/dsgn_chain_check.sh` | Verify detection → tracker → prediction wiring |
-| `data/autoware_data/inspect_emergency.sh` | Which diagnostic is causing hazard/MRM |
-| `data/autoware_data/verify_stack_ready.sh` | Post-restart health check |
+| `diagnose_stuck.sh` | Why stopped? (MRM / obstacle / loc) |
+| `dsgn_chain_check.sh` | Verify detection → tracker → prediction wiring |
+| `inspect_emergency.sh` | Which diagnostic is causing hazard/MRM |
+| `verify_stack_ready.sh` | Post-restart health check |
 
-### DSGN (host unless noted)
+### AWSIM (`scripts/awsim/` — host unless noted)
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/dsgn_setup_venv.sh` | PT 2.6 + cu124 venv for L40S |
-| `scripts/dsgn_run_inference.sh` | Inference on host (PT 2.6; use `finetune_48`) |
-| `scripts/dsgn_train.sh` | Full-model fine-tune from `finetune_48` |
-| `scripts/dsgn_transform_label.py` | AWSIM `label_2` → KITTI convention |
-| `scripts/merge_dsgn_outputs.py` | Merge baseline + patched frame ranges |
-| `scripts/dsgn_offline_build.sh` | **Inside Docker:** colcon build `dsgn_offline` |
-| `scripts/dsgn_offline_run.sh` | **Inside Docker:** publish offline detections |
-| `scripts/apply_stereo_patches.py` | Apply square noise patches to stereo datasets |
-| `scripts/apply_face_patch.py` | Apply optimized face patch to a dataset |
+| `awsim/awsim_launch.sh` | Launch AWSIM (`pristine`/`modded`) in Docker with correct env |
+| `awsim/awsim_verify.sh` | Check AWSIM topics, rates, live camera geometry |
+| `awsim/awsim_stereo_build.sh` | Compile the stereo-camera mod (`StereoMod.dll`) |
+| `awsim/awsim_stereo_install.py` | Register/`--uninstall` the mod in `modded/` |
+| `awsim/awsim_stereo_check.py` | **In Docker:** quantitative stereo pair validation |
+
+### Driving / offline replay (`scripts/` root — Docker paths)
+
+| Script | Purpose |
+|--------|---------|
+| `drive_route_and_engage.sh` | Clear → init pose → goal → engage |
+| `engage_autoware.sh` | **Host:** engage + motion check |
+| `record_kitti_dataset.sh` | **Host:** record KITTI-layout stereo from modded AWSIM |
+| `dsgn_offline_build.sh` | **Inside Docker:** colcon build `dsgn_offline` |
+| `dsgn_offline_run.sh` | **Inside Docker:** publish offline detections |
+
+### DSGN (`scripts/dsgn/` — host)
+
+| Script | Purpose |
+|--------|---------|
+| `dsgn/dsgn_setup_venv.sh` | PT 2.6 + cu124 venv for L40S |
+| `dsgn/dsgn_run_inference.sh` | Inference on host (PT 2.6; use `finetune_48`) |
+| `dsgn/dsgn_train.sh` | Full-model fine-tune from `finetune_48` |
+| `dsgn/dsgn_transform_label.py` | AWSIM `label_2` → KITTI convention |
+| `dsgn/merge_dsgn_outputs.py` | Merge baseline + patched frame ranges |
 
 ### Patch optimization (`scripts/patch_optimization/`)
 
@@ -368,7 +383,9 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 |--------|---------|
 | `localize_patches.py` | Project rear-face boxes from detections → CSV |
 | `optimize_patch.py` | Optimize universal adversarial patch vs DSGN |
+| `apply_face_patch.py` | Apply optimized face patch to a dataset |
 | `eval_patch.py` | Offline evaluate patch suppression |
+| `attack_stats.py` | Compare baseline vs patched offline detections |
 | `prepare_recording_datasets.py` | Split/calib prep after `record_kitti_dataset.sh` |
 | `build_combined_dataset.py` | Merge recording CSVs for multi-run optimization |
 
@@ -384,14 +401,17 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 | `helpers/monitor_stop_cause.py` | 5 Hz stop-cause logger while driving |
 | `helpers/download_autoware_artifacts_from_role.py` | Bootstrap Autoware artifacts (rare) |
 
-### Notes
+### Notes / handoff
 
 | Doc | Purpose |
 |-----|---------|
-| [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md) | Minimal AWSIM + Autoware startup for a new user |
-| [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md) | Adding a stereo camera to the AWSIM **binary** (no Unity); AWSIM launch gotchas |
+| [`HANDOFF.md`](HANDOFF.md) | Successor orientation: repos, data link, first runs |
+| [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md) | Minimal AWSIM + Autoware startup |
+| [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md) | Patch localize → optimize → apply → eval order |
+| [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md) | Stereo camera mod on the AWSIM **binary**; launch gotchas |
 | [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md) | Offline Autoware replay workflow |
-| [`notes26/DSGN_AWSIM_FINDINGS.md`](notes26/DSGN_AWSIM_FINDINGS.md) | Geometry, labels, finetune decisions |
+| [`notes26/DSGN_AWSIM_FINDINGS.md`](notes26/DSGN_AWSIM_FINDINGS.md) | Geometry, labels, finetune decisions (`finetune_48` vs `finetune_60`) |
+| [`notes26/autoware_pin.md`](notes26/autoware_pin.md) | Autoware Docker image pin |
 
 ---
 
@@ -408,7 +428,7 @@ See `dsgn/` for datasets, checkpoints, and detection outputs; DSGN forks above f
 ## External references
 
 - Glue repo: [adricalm/adversarial-attacks-autonomous-driving](https://github.com/adricalm/adversarial-attacks-autonomous-driving)
-- Autoware upstream: `external/autoware/` (gitignored local checkout)
+- Autoware pin: [`notes26/autoware_pin.md`](notes26/autoware_pin.md) (Docker image only; no local checkout)
 - DSGN stereo detector: `external/DSGN_custom/` — fork and commit separately
 - DSGN offline ROS bridge: `src/dsgn_offline/` — fork and commit separately
 - Arka org (upstream forks): [DF-Autoware-AWSIM](https://github.com/orgs/DF-Autoware-AWSIM/repositories)

@@ -18,11 +18,7 @@ data/autoware_data/traffic_light_verify_result.json
 external/DSGN_custom/
 src/dsgn_offline/
 
-# Upstream Autoware reference checkout 
-# See notes/external_autoware_ref.md for remote URL, branch, and commit hash.
-external/autoware/
-
-# Large binary / media data 
+# Large binary / media data
 data/awsim/extracted/
 data/awsim/*.zip
 data/autoware_data/ml_models/

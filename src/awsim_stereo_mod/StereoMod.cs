@@ -13,7 +13,7 @@
 // HOW IT IS LOADED
 // No BepInEx / Doorstop. This assembly is registered in Unity's own
 // awsim_labs_Data/RuntimeInitializeOnLoads.json and listed in ScriptingAssemblies.json,
-// so Unity calls Bootstrap.Init() itself at startup. See scripts/awsim_stereo_install.py.
+// so Unity calls Bootstrap.Init() itself at startup. See scripts/awsim/awsim_stereo_install.py.
 //
 // GEOMETRY - must match dsgn/datasets/arka/.../calib (all frames identical):
 //   fx=960.0  fy=959.3908081054688  cx=960.5  cy=540.5  at 1920x1080

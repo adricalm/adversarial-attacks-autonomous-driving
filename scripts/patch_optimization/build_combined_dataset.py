@@ -7,10 +7,10 @@ linking their stereo/calibration files, and rewriting train/validation CSVs.
 
 Example:
     python scripts/patch_optimization/build_combined_dataset.py \
-      --out dsgn/datasets/adria/4.recordings_optimization1 \
-      --train-source adria_train dsgn/datasets/adria/training_kitti_labels \
-        dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \
-      --val-source frontal5 dsgn/datasets/recordings/train_frontal5 \
+      --out dsgn/datasets/adria/patch_train \
+      --train-source train_frontal1 dsgn/datasets/recordings/train_frontal1 \
+        dsgn/datasets/recordings/train_frontal1/patches_localized.csv \
+      --val-source train_frontal5 dsgn/datasets/recordings/train_frontal5 \
         dsgn/datasets/recordings/train_frontal5/patches_localized.csv
 """
 
@@ -121,7 +121,6 @@ def main() -> int:
         args.out / "dataset",
         args.out / "train.csv",
         args.out / "val.csv",
-        args.out / "manifest.csv",
     ]
     if any(path.exists() for path in generated):
         print(
@@ -149,7 +148,6 @@ def main() -> int:
         (dataset_root / subdir).mkdir(parents=True, exist_ok=False)
 
     output_rows: dict[str, list[dict[str, str]]] = {"train": [], "val": []}
-    manifest: list[dict[str, str]] = []
     next_id = 0
     for source, rows in loaded:
         for row in rows:
@@ -165,30 +163,15 @@ def main() -> int:
             rewritten = dict(row)
             rewritten["frame"] = combined_frame
             output_rows[source.split].append(rewritten)
-            manifest.append(
-                {
-                    "frame": combined_frame,
-                    "split": source.split,
-                    "source": source.name,
-                    "source_frame": source_frame,
-                    "dataset": str(source.dataset),
-                    "csv": str(source.csv_path),
-                }
-            )
 
     write_csv(args.out / "train.csv", fieldnames, output_rows["train"])
     write_csv(args.out / "val.csv", fieldnames, output_rows["val"])
-    write_csv(
-        args.out / "manifest.csv",
-        ["frame", "split", "source", "source_frame", "dataset", "csv"],
-        manifest,
-    )
 
+    total = len(output_rows["train"]) + len(output_rows["val"])
     print(f"built {dataset_root} using {args.link_mode}s")
     print(f"  train rows: {len(output_rows['train'])}")
     print(f"  val rows:   {len(output_rows['val'])}")
-    print(f"  total:      {len(manifest)}")
-    print(f"  mapping:    {args.out / 'manifest.csv'}")
+    print(f"  total:      {total}")
     return 0
 
 

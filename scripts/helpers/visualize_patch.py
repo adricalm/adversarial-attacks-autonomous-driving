@@ -2,9 +2,9 @@
 
 Usage:
     python scripts/helpers/visualize_patch.py \
-        --run  dsgn/datasets/adria/2.training_patch_optimization/optimize_logit_face050 \
-        --images dsgn/datasets/adria/training_kitti_labels \
-        --csv   dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \
+        --run  dsgn/datasets/adria/patch_train/face050 \
+        --images dsgn/datasets/adria/patch_train/dataset \
+        --csv   dsgn/datasets/adria/patch_train/train.csv \
         --out   /tmp/patch_vis
 
 Picks a spread of frames across depth bins, renders the patch on left+right,
@@ -12,100 +12,33 @@ draws the face bounding box in red and the pasted patch rect in green.
 Saves one PNG per frame + a compact contact-sheet montage.
 """
 
+from __future__ import annotations
+
 import argparse
-import csv
 import sys
 from pathlib import Path
 
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-
-# ── geometry constants (must match optimize_patch.py) ────────────────────────
-FULL_W, FULL_H = 1920, 1080
-DOWNSCALE = 0.5
-
-
-def load_csv(path: Path):
-    rows = []
-    with path.open() as f:
-        for r in csv.DictReader(f):
-            rows.append(
-                dict(
-                    frame=f"{int(r['frame']):06d}",
-                    depth_m=float(r["depth_m"]),
-                    ego_dist=float(r.get("ego_dist") or r["depth_m"]),
-                    face_x0=float(r.get("x0") or 0),
-                    face_y0=float(r.get("y0") or 0),
-                    face_x1=float(r.get("x1") or 0),
-                    face_y1=float(r.get("y1") or 0),
-                    loc_x=float(r["loc_x"]),
-                    loc_z=float(r["loc_z"]),
-                )
-            )
-    rows.sort(key=lambda x: x["frame"])
-    return rows
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "patch_optimization"))
+from patch_geometry import (
+    FacePlacement,
+    load_face_csv,
+    paste_pil,
+    stereo_rects,
+    visible_frac,
+)
 
 
-def patch_rect_face(row: dict, area_frac: float):
-    """(x0, y0, w, h) in full-res pixels, face geometry."""
-    fw = row["face_x1"] - row["face_x0"]
-    fh = row["face_y1"] - row["face_y0"]
-    if fw <= 0 or fh <= 0:
-        return None
-    k = float(np.sqrt(max(area_frac, 1e-6)))
-    w = max(1, int(round(fw * k)))
-    h = max(1, int(round(fh * k)))
-    cx = 0.5 * (row["face_x0"] + row["face_x1"])
-    cy = 0.5 * (row["face_y0"] + row["face_y1"])
-    return int(round(cx - w / 2.0)), int(round(cy - h / 2.0)), w, h
-
-
-def load_calib(calib_path: Path):
-    data = {}
-    with calib_path.open() as f:
-        for line in f:
-            k, _, v = line.partition(":")
-            data[k.strip()] = [float(x) for x in v.split()]
-    P2 = np.array(data["P2"]).reshape(3, 4)
-    P3 = np.array(data["P3"]).reshape(3, 4)
-    f_u = P2[0, 0]
-    baseline = abs(P2[0, 3] - P3[0, 3]) / f_u
-    return f_u, baseline
-
-
-def visible_frac(rect, img_w=FULL_W, img_h=FULL_H):
-    x0, y0, w, h = rect
-    ix0, iy0 = max(0, x0), max(0, y0)
-    ix1, iy1 = min(img_w, x0 + w), min(img_h, y0 + h)
-    return max(0, ix1 - ix0) * max(0, iy1 - iy0) / float(max(1, w * h))
-
-
-def paste_patch(img_pil: Image.Image, patch_pil: Image.Image, x0: int, y0: int):
-    """Paste patch at (x0,y0) clipped to canvas."""
-    iw, ih = img_pil.size
-    pw, ph = patch_pil.size
-    cx0, cy0 = max(0, x0), max(0, y0)
-    cx1, cy1 = min(iw, x0 + pw), min(ih, y0 + ph)
-    if cx0 >= cx1 or cy0 >= cy1:
-        return img_pil.copy()
-    region = patch_pil.crop((cx0 - x0, cy0 - y0, cx1 - x0, cy1 - y0))
-    out = img_pil.copy()
-    out.paste(region, (cx0, cy0))
-    return out
-
-
-def draw_rects(img_pil: Image.Image, face_rect, patch_rect, thickness=3):
+def draw_rects(img_pil: Image.Image, face: FacePlacement, patch_rect, thickness=3):
     """Draw face box (red) and patch rect (lime)."""
     out = img_pil.copy()
     draw = ImageDraw.Draw(out)
-    fx0, fy0, fx1, fy1 = (
-        int(face_rect[0]),
-        int(face_rect[1]),
-        int(face_rect[2]),
-        int(face_rect[3]),
+    draw.rectangle(
+        [int(face.face_x0), int(face.face_y0), int(face.face_x1), int(face.face_y1)],
+        outline=(255, 40, 40),
+        width=thickness,
     )
-    draw.rectangle([fx0, fy0, fx1, fy1], outline=(255, 40, 40), width=thickness)
     if patch_rect is not None:
         px0, py0, pw, ph = patch_rect
         draw.rectangle(
@@ -125,53 +58,43 @@ def add_label(img_pil: Image.Image, text: str, color=(255, 255, 80)):
     return out
 
 
-def render_frame(row, images_root, patch_pil, area_frac=0.50, scale=0.4):
+def render_frame(
+    face: FacePlacement,
+    images_root: Path,
+    patch_pil: Image.Image,
+    area_frac: float,
+    scale: float,
+):
     """Render left + right side-by-side with patch + annotations."""
-    frame = row["frame"]
-    left_path = images_root / "image_2" / f"{frame}.png"
-    right_path = images_root / "image_3" / f"{frame}.png"
-    calib_path = images_root / "calib" / f"{frame}.txt"
-
-    if not left_path.is_file():
+    left_path = images_root / "image_2" / f"{face.frame}.png"
+    right_path = images_root / "image_3" / f"{face.frame}.png"
+    calib_path = images_root / "calib" / f"{face.frame}.txt"
+    if not left_path.is_file() or not calib_path.is_file():
         return None
 
-    f_u, baseline = load_calib(calib_path)
+    placed = stereo_rects(face, area_frac, calib_path)
+    if placed is None:
+        return None
+    (x0, y0, w, h), (rx0, ry0, _, _), disp = placed
+
     left_img = Image.open(left_path).convert("RGB")
     right_img = Image.open(right_path).convert("RGB")
-
-    rect = patch_rect_face(row, area_frac)
-    if rect is None:
-        return None
-
-    x0, y0, w, h = rect
-    disp = f_u * baseline / row["depth_m"]
-    right_x0 = int(round(x0 - disp))
-
     patch_resized = patch_pil.resize((w, h), Image.BILINEAR)
+    left_patched = paste_pil(left_img, patch_resized, x0, y0)
+    right_patched = paste_pil(right_img, patch_resized, rx0, ry0)
 
-    # Paste patch onto images
-    left_patched = paste_patch(left_img, patch_resized, x0, y0)
-    right_patched = paste_patch(right_img, patch_resized, right_x0, y0)
-
-    # Draw boxes: red = full face AABB, green = 50%-area patch rect
-    face_box = (row["face_x0"], row["face_y0"], row["face_x1"], row["face_y1"])
-
-    left_ann = draw_rects(left_patched, face_box, rect)
-    right_ann = draw_rects(right_patched, face_box, (right_x0, y0, w, h))
-
-    depth = row["depth_m"]
-    vis_l = visible_frac(rect)
-    vis_r = visible_frac((right_x0, y0, w, h))
+    left_rect = (x0, y0, w, h)
+    right_rect = (rx0, ry0, w, h)
     left_ann = add_label(
-        left_ann,
-        f"L  frame={frame}  depth={depth:.1f}m  patch={w}×{h}px  vis={vis_l:.0%}",
+        draw_rects(left_patched, face, left_rect),
+        f"L  frame={face.frame}  depth={face.depth_m:.1f}m  "
+        f"patch={w}×{h}px  vis={visible_frac(left_rect):.0%}",
     )
     right_ann = add_label(
-        right_ann,
-        f"R  disp={disp:.1f}px  right_x0={right_x0}  vis={vis_r:.0%}",
+        draw_rects(right_patched, face, right_rect),
+        f"R  disp={disp:.1f}px  right_x0={rx0}  vis={visible_frac(right_rect):.0%}",
     )
 
-    # Scale down, then stitch L|R
     new_w = int(left_ann.width * scale)
     new_h = int(left_ann.height * scale)
     left_s = left_ann.resize((new_w, new_h), Image.LANCZOS)
@@ -182,31 +105,26 @@ def render_frame(row, images_root, patch_pil, area_frac=0.50, scale=0.4):
     return combined
 
 
-def pick_frames(rows, n=12):
-    """Pick n frames spread across depth bins, all with visible patch."""
-    visible = [r for r in rows if patch_rect_face(r, 0.50) is not None
-               and visible_frac(patch_rect_face(r, 0.50)) > 0
-               and visible_frac(
-                   (_right_x0_for(r, patch_rect_face(r, 0.50)), 0,
-                    patch_rect_face(r, 0.50)[2], patch_rect_face(r, 0.50)[3])
-               ) > 0]
+def pick_frames(
+    rows: list[FacePlacement], images_root: Path, n: int, area_frac: float
+) -> list[FacePlacement]:
+    """Pick n frames spread across depth, all with a visible stereo patch."""
+    visible: list[FacePlacement] = []
+    for face in rows:
+        calib_path = images_root / "calib" / f"{face.frame}.txt"
+        if not calib_path.is_file():
+            continue
+        placed = stereo_rects(face, area_frac, calib_path)
+        if placed is None:
+            continue
+        left_rect, right_rect, _ = placed
+        if visible_frac(left_rect) > 0 and visible_frac(right_rect) > 0:
+            visible.append(face)
     if not visible:
         return rows[:n]
-    visible.sort(key=lambda r: r["depth_m"])
+    visible.sort(key=lambda item: item.depth_m)
     step = max(1, len(visible) // n)
     return visible[::step][:n]
-
-
-def _right_x0_for(row, rect):
-    calib_path = Path(
-        "dsgn/datasets/adria/training_kitti_labels/calib"
-    ) / f"{row['frame']}.txt"
-    try:
-        f_u, baseline = load_calib(calib_path)
-    except Exception:
-        return rect[0]
-    disp = f_u * baseline / row["depth_m"]
-    return int(round(rect[0] - disp))
 
 
 def make_montage(frames_imgs, cols=2):
@@ -249,26 +167,26 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     patch_pil = Image.open(patch_path).convert("RGB")
-    rows = load_csv(args.csv)
+    rows = load_face_csv(args.csv)
 
     if args.frames:
-        frame_set = set(f"{int(x):06d}" for x in args.frames)
-        selected = [r for r in rows if r["frame"] in frame_set]
+        frame_set = {f"{int(x):06d}" for x in args.frames}
+        selected = [face for face in rows if face.frame in frame_set]
     else:
-        selected = pick_frames(rows, args.n_frames)
+        selected = pick_frames(rows, args.images, args.n_frames, args.area_frac)
 
     print(f"patch: {patch_path}  ({patch_pil.size[0]}×{patch_pil.size[1]}px)")
     print(f"rendering {len(selected)} frames → {out_dir}")
 
     rendered = []
-    for row in selected:
-        img = render_frame(row, args.images, patch_pil, args.area_frac, args.scale)
+    for face in selected:
+        img = render_frame(face, args.images, patch_pil, args.area_frac, args.scale)
         if img is None:
-            print(f"  skip {row['frame']} (no image or rect)")
+            print(f"  skip {face.frame} (no image or rect)")
             continue
-        out_path = out_dir / f"{row['frame']}.png"
+        out_path = out_dir / f"{face.frame}.png"
         img.save(out_path)
-        print(f"  {row['frame']}  depth={row['depth_m']:.1f}m  → {out_path.name}")
+        print(f"  {face.frame}  depth={face.depth_m:.1f}m  → {out_path.name}")
         rendered.append(img)
 
     if rendered:

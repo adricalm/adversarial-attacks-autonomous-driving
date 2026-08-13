@@ -90,13 +90,13 @@ xhost +SI:localuser:root
 
 cd "$ROOT"
 ROS_DOMAIN_ID="$DOMAIN" AWSIM_DISPLAY="$AWSIM_DISPLAY" \
-  bash scripts/awsim_launch.sh pristine
+  bash scripts/awsim/awsim_launch.sh pristine
 
 # Wait for scene loading (~60–75 s), then require the real ROS publishers.
-ROS_DOMAIN_ID="$DOMAIN" bash scripts/awsim_verify.sh awsim_pristine
+ROS_DOMAIN_ID="$DOMAIN" bash scripts/awsim/awsim_verify.sh awsim_pristine
 ```
 
-Use `scripts/awsim_launch.sh modded` only for the stereo build. Do not source `/opt/ros/...` before launching AWSIM: its bundled `ros2-for-unity` library must not inherit Autoware's ROS environment. The launch script removes those variables for this reason. `awsim_verify.sh` is the gate: a normal-looking GUI without `/clock`, camera, and LiDAR topics is a failed launch.
+Use `scripts/awsim/awsim_launch.sh modded` only for the stereo build. Do not source `/opt/ros/...` before launching AWSIM: its bundled `ros2-for-unity` library must not inherit Autoware's ROS environment. The launch script removes those variables for this reason. `scripts/awsim/awsim_verify.sh` is the gate: a normal-looking GUI without `/clock`, camera, and LiDAR topics is a failed launch.
 
 ### Initialize, route, and drive
 

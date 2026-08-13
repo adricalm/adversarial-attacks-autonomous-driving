@@ -1,42 +1,21 @@
 #!/usr/bin/env python3
-"""Optimize a shared adversarial patch against DSGN (closest-car LSE evasion).
+"""Optimize a shared adversarial patch against DSGN (closest-car logit LSE evasion).
 
-Always loads clean stereo images and pastes the current shared patch in-graph.
-Does not rewrite datasets on disk.
-
-Loss: LSE_tau({ logit_q : all Car anchors within --match-radius of the target }),
-optionally floored by --logit-clamp.
-
-Reported max_s / val_max_s are the max Car probability among those anchors.
-
-Geometry, selected by --shape:
-  square (default)  the CSV `size` square at the CSV centre.
-  face              --area-frac of the rear-face box at its aspect ratio.
-
-Val split, selected by --split:
-  contiguous (default)  last val-frac of CSV rows.
-  strided               every k-th row (balanced depth mix).
-
-Resume / epochs: --epochs is always "how many more to run". Absolute epoch IDs
-are stored in each .pt; on --resume the loop continues from epoch+1 (or from
---start-epoch+1 for old checkpoints without metadata). Snapshots are
-patch_epochXXX / patch_best_epochXXX with absolute XXX; patch_best.* is the
-latest-best pointer. Stdout is teed to out/run_TIMESTAMP.log.
+Loads clean stereo images and pastes the current shared patch in-graph each step.
+Requires separate train/val CSVs (e.g. from build_combined_dataset.py).
 
 Example
 -------
   external/DSGN_custom/.venv/bin/python scripts/patch_optimization/optimize_patch.py \\
-    --images dsgn/datasets/adria/training_kitti_labels \\
-    --csv dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \\
-    --cfg dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py \\
-    --loadmodel dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar \\
-    --out dsgn/datasets/adria/2.training_patch_optimization/optimize \\
-    --epochs 5
+    --images dsgn/datasets/adria/patch_train/dataset \\
+    --csv dsgn/datasets/adria/patch_train/train.csv \\
+    --val-csv dsgn/datasets/adria/patch_train/val.csv \\
+    --out dsgn/datasets/adria/patch_train/face050 \\
+    --area-frac 0.50 --epochs 20
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import importlib.util
 import random
 import sys
@@ -54,89 +33,32 @@ ROOT = Path(__file__).resolve().parents[2]
 DSGN_ROOT = ROOT / "external" / "DSGN_custom"
 sys.path.insert(0, str(DSGN_ROOT))
 sys.path.insert(0, str(DSGN_ROOT / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dsgn.dataloader.kitti_util import Calibration  # noqa: E402
-from dsgn.models import StereoNet  # noqa: E402
-from dsgn.utils.torch_utils import compute_locations_bev, project_rect_to_image  # noqa: E402
+from dsgn.dataloader.kitti_util import Calibration
+from dsgn.models import StereoNet
+from dsgn.utils.torch_utils import compute_locations_bev
+
+from patch_geometry import (
+    FULL_H,
+    FULL_W,
+    FacePlacement,
+    disparity_px,
+    filter_visible_frames,
+    load_face_csv,
+    patch_rect,
+    right_x0,
+)
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
-FULL_W, FULL_H = 1920, 1080
 DOWNSCALE = 0.5
 CAR_CLASS_IDX = 1  # labels are 1=Ped, 2=Car, 3=Cyclist → channel index class-1
-VIS_TOP_K = 3  # proposals drawn on --vis-every / --vis-val-max overlays
-
-
-@dataclass
-class FrameSpec:
-    frame: str
-    center_x: float
-    center_y: float
-    size: int
-    depth_m: float
-    loc_x: float
-    loc_z: float
-    face_x0: float = 0.0
-    face_y0: float = 0.0
-    face_x1: float = 0.0
-    face_y1: float = 0.0
-
-    @property
-    def face_w(self) -> float:
-        return self.face_x1 - self.face_x0
-
-    @property
-    def face_h(self) -> float:
-        return self.face_y1 - self.face_y0
-
-
-RESAMPLE_MODES = ("bilinear", "bicubic", "area")
-
-
-@dataclass
-class RunOpts:
-    """Everything about the objective and the patch's rendering.
-
-    Defaults keep the original objective, geometry and per-frame stepping, so
-    changing any of those requires passing a flag. Rendering is the one
-    exception: resize_patch now antialiases, which the earlier runs did not,
-    because that is what makes training agree with what apply_stereo_patches
-    writes. Those runs are therefore not bit-reproducible from here.
-
-    Near-car weighting (near_weight):
-      "none"  all frames weighted equally (default, backward-compatible).
-      "inv"   w = clamp(near_ref_depth / depth_m, 1.0, near_max_weight);
-              frames closer than near_ref_depth get boosted ≤ near_max_weight×,
-              frames farther get w=1 (not down-weighted).
-      "step"  w = near_boost if depth_m <= near_thresh else 1.0.
-    """
-
-    temperature: float = 1.0
-    logit_clamp: float | None = None
-    match_radius: float = 2.0
-    shape: str = "square"
-    area_frac: float = 0.23
-    resample: str = "bilinear"
-    quantize: bool = False
-    near_weight: str = "none"   # none / inv / step
-    near_thresh: float = 15.0   # step: frames ≤ this (m) are boosted
-    near_boost: float = 5.0     # step: boost multiplier for near frames
-    near_ref_depth: float = 15.0  # inv: depth (m) at which w=1; closer → >1
-    near_max_weight: float = 10.0  # inv: cap on per-frame weight
-    near_emphasis: str = "loss"  # loss / sample / both — how near_weight is spent
-
-
-@dataclass
-class CarProposals:
-    """Top-k local Car proposals (visualization only)."""
-
-    scores: torch.Tensor  # (k,)
-    loc_idx: torch.Tensor  # (k,) int64 into flattened BEV
-    angle_idx: torch.Tensor  # (k,) int64
-
-    @property
-    def n(self) -> int:
-        return int(self.scores.numel())
+LSE_TEMPERATURE = 1.0
+MATCH_RADIUS_M = 2.0
+SAVE_EVERY = 10
+NEAR_DEPTH_M = 15.0
+MIN_VISIBLE_FRAC = 0.0
 
 
 def load_cfg(cfg_path: Path):
@@ -146,29 +68,6 @@ def load_cfg(cfg_path: Path):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.cfg
-
-
-def load_csv(path: Path) -> list[FrameSpec]:
-    rows: list[FrameSpec] = []
-    with path.open() as f:
-        for r in csv.DictReader(f):
-            rows.append(
-                FrameSpec(
-                    frame=f"{int(r['frame']):06d}",
-                    center_x=float(r["center_x"]),
-                    center_y=float(r["center_y"]),
-                    size=int(round(float(r["size"]))),
-                    depth_m=float(r["depth_m"]),
-                    loc_x=float(r["loc_x"]),
-                    loc_z=float(r["loc_z"]),
-                    face_x0=float(r.get("x0", 0.0) or 0.0),
-                    face_y0=float(r.get("y0", 0.0) or 0.0),
-                    face_x1=float(r.get("x1", 0.0) or 0.0),
-                    face_y1=float(r.get("y1", 0.0) or 0.0),
-                )
-            )
-    rows.sort(key=lambda x: x.frame)
-    return rows
 
 
 def read_image_01(path: Path) -> torch.Tensor:
@@ -198,79 +97,19 @@ def paste_rect(img: torch.Tensor, patch: torch.Tensor, x0: int, y0: int) -> torc
     return img * (1.0 - mask) + canvas * mask
 
 
-def patch_rect(spec: FrameSpec, shape: str, area_frac: float) -> tuple[int, int, int, int]:
-    """Target rectangle in full-res pixels as (x0, y0, w, h).
-
-    `square` reproduces the original geometry exactly: the CSV `size` square at
-    the CSV centre, which the localizer has already clipped to keep on-image.
-    `face` covers `area_frac` of the projected rear-face AABB at the face's own
-    aspect ratio, centred on the face box -- the geometry the capacity tests
-    used, so it carries their placement too, not just their shape.
-    """
-    if shape == "square":
-        s = max(1, spec.size)
-        return int(round(spec.center_x)) - s // 2, int(round(spec.center_y)) - s // 2, s, s
-
-    if spec.face_w <= 0 or spec.face_h <= 0:
-        raise ValueError(
-            f"frame {spec.frame}: --shape face needs x0/y0/x1/y1 in the CSV"
-        )
-    k = float(np.sqrt(max(area_frac, 1e-6)))
-    w = max(1, int(round(spec.face_w * k)))
-    h = max(1, int(round(spec.face_h * k)))
-    cx = 0.5 * (spec.face_x0 + spec.face_x1)
-    cy = 0.5 * (spec.face_y0 + spec.face_y1)
-    return int(round(cx - w / 2.0)), int(round(cy - h / 2.0)), w, h
-
-
-def right_x0_for(
-    spec: FrameSpec, shape: str, rect: tuple[int, int, int, int], disp: float
-) -> int:
-    """Right-image paste column, keeping each shape's original rounding.
-
-    The two branches differ by up to a pixel. That is deliberate: `square`
-    reproduces this script's earlier runs and `face` reproduces ceiling_test's,
-    so results stay comparable to the evidence each geometry came from.
-    """
-    x0, _, w, _ = rect
-    if shape == "square":
-        return int(round(spec.center_x - disp)) - w // 2
-    return int(round(x0 - disp))
-
-
-def visible_area_px(rect: tuple[int, int, int, int]) -> int:
-    """Area of `rect` that actually lands inside the full-res image."""
-    x0, y0, w, h = rect
-    ix0, iy0 = max(0, x0), max(0, y0)
-    ix1, iy1 = min(FULL_W, x0 + w), min(FULL_H, y0 + h)
-    return max(0, ix1 - ix0) * max(0, iy1 - iy0)
-
-
-def resize_patch(patch: torch.Tensor, h: int, w: int, mode: str) -> torch.Tensor:
-    """Differentiable resize of a (3, H, W) patch to (h, w).
+def resize_patch(patch: torch.Tensor, h: int, w: int) -> torch.Tensor:
+    """Differentiable bilinear resize of a (3, H, W) patch to (h, w).
 
     antialias=True is required for parity with PIL, which always prefilters on
-    downscale: measured against PIL on a saturated patch, bilinear agrees to
-    0.9/255 with it and 154/255 without. Only `bilinear` reaches parity --
-    bicubic differs by up to 47/255 (different cubic coefficients) and `area`
-    by up to 227/255 (adaptive pooling is not PIL's BOX), so those two are for
-    robustness augmentation, not for matching deployment.
+    downscale.
     """
-    kwargs = (
-        {"align_corners": False, "antialias": True} if mode in ("bilinear", "bicubic") else {}
-    )
-    out = F.interpolate(patch.unsqueeze(0), size=(h, w), mode=mode, **kwargs).squeeze(0)
-    return out.clamp(0.0, 1.0) if mode == "bicubic" else out
-
-
-def quantize_uint8(x: torch.Tensor) -> torch.Tensor:
-    """Snap to the 8-bit grid with a straight-through gradient.
-
-    The deployed patch is written as a uint8 PNG, so training without this sees
-    a precision the attack never actually gets.
-    """
-    q = torch.round(x.clamp(0.0, 1.0) * 255.0) / 255.0
-    return x + (q - x).detach()
+    return F.interpolate(
+        patch.unsqueeze(0),
+        size=(h, w),
+        mode="bilinear",
+        align_corners=False,
+        antialias=True,
+    ).squeeze(0)
 
 
 def pad_to_multiple(img: torch.Tensor, divisor: int = 32) -> torch.Tensor:
@@ -287,30 +126,24 @@ def prepare_stereo_pair(
     left: torch.Tensor,
     right: torch.Tensor,
     patch: torch.Tensor,
-    spec: FrameSpec,
+    spec: FacePlacement,
     f_u: float,
     baseline_m: float,
     device: torch.device,
-    shape: str = "square",
-    area_frac: float = 0.23,
-    resample: str = "bilinear",
-    quantize: bool = False,
+    area_frac: float,
 ) -> tuple[torch.Tensor, torch.Tensor, tuple[int, int]]:
-    """Paste shared patch, downsample 0.5×, ImageNet-normalize, pad.
-
-    Returns batched (1,3,H',W') tensors and unpadded (H, W).
-    """
+    """Paste shared patch, downsample 0.5×, ImageNet-normalize, pad."""
     left = left.to(device)
     right = right.to(device)
-    rect = patch_rect(spec, shape, area_frac)
+    rect = patch_rect(spec, area_frac)
+    if rect is None:
+        raise ValueError(f"frame {spec.frame}: CSV needs a valid x0/y0/x1/y1 face box")
     x0, y0, w, h = rect
-    p = resize_patch(patch, h, w, resample)
-    if quantize:
-        p = quantize_uint8(p)
+    p = resize_patch(patch, h, w)
 
-    disp = f_u * baseline_m / spec.depth_m
+    disp = disparity_px(f_u, baseline_m, spec.depth_m)
     left_p = paste_rect(left, p, x0, y0)
-    right_p = paste_rect(right, p, right_x0_for(spec, shape, rect, disp), y0)
+    right_p = paste_rect(right, p, right_x0(x0, disp), y0)
 
     net_h = int(FULL_H * DOWNSCALE)
     net_w = int(FULL_W * DOWNSCALE)
@@ -332,219 +165,12 @@ def prepare_stereo_pair(
     return left_n, right_n, image_size
 
 
-def top_car_proposals(
-    bbox_cls: torch.Tensor,
-    locations_bev: torch.Tensor,
-    loc_x: float,
-    loc_z: float,
-    radius: float,
-    num_classes: int,
-    num_angles: int,
-    k: int,
-    car_idx: int = CAR_CLASS_IDX,
-) -> CarProposals:
-    """Return up to `k` strongest Car proposals near (loc_x, loc_z) for overlays."""
-    n, c, h, w = bbox_cls.shape
-    assert n == 1
-    assert c == num_angles * num_classes, f"bbox_cls channels {c} != {num_angles}*{num_classes}"
-    scores = (
-        bbox_cls.view(n, num_angles, num_classes, h, w)
-        .permute(0, 3, 4, 1, 2)
-        .reshape(n, -1, num_angles, num_classes)
-        .sigmoid()
-    )
-    dist = torch.hypot(locations_bev[:, 0] - loc_x, locations_bev[:, 1] - loc_z)
-    mask = dist <= radius
-    if mask.any():
-        loc_ids = mask.nonzero(as_tuple=False).squeeze(1)
-    else:
-        _, nn_idx = torch.topk(dist, k=min(64, dist.numel()), largest=False)
-        loc_ids = nn_idx
-
-    local = scores[0, loc_ids, :, car_idx]
-    flat = local.reshape(-1)
-    empty = CarProposals(
-        scores=flat.new_zeros((0,)),
-        loc_idx=loc_ids.new_zeros((0,)),
-        angle_idx=loc_ids.new_zeros((0,)),
-    )
-    if flat.numel() == 0 or k <= 0:
-        return empty
-
-    k = min(int(k), int(flat.numel()))
-    top_vals, top_pos = torch.topk(flat, k=k)
-    loc_idx = loc_ids[top_pos // num_angles]
-    angle_idx = top_pos % num_angles
-    return CarProposals(scores=top_vals, loc_idx=loc_idx, angle_idx=angle_idx)
-
-
-def decode_matched_boxes2d(
-    bbox_reg: torch.Tensor,
-    matched: CarProposals,
-    locations_bev: torch.Tensor,
-    cfg,
-    calib_p: np.ndarray,
-    car_idx: int = CAR_CLASS_IDX,
-) -> list[tuple[float, float, float, float, float]]:
-    """Decode top-k matched proposals to full-res 2D AABBs + score.
-
-    Returns list of (x0, y0, x1, y1, score) in full-resolution image pixels.
-    """
-    if matched.n == 0:
-        return []
-    if not bool(getattr(cfg, "box_corner_parameters", True)):
-        return []
-
-    n, c, h, w = bbox_reg.shape
-    num_angles = int(cfg.num_angles)
-    num_classes = int(cfg.num_classes)
-    pred_dim = 24
-    assert c == num_angles * num_classes * pred_dim
-
-    reg = (
-        bbox_reg.view(n, num_angles, num_classes, pred_dim, h, w)
-        .permute(0, 4, 5, 1, 2, 3)
-        .reshape(n, -1, num_angles, num_classes, pred_dim)
-    )
-    anchors_y = torch.as_tensor(cfg.RPN3D.ANCHORS_Y, device=bbox_reg.device, dtype=torch.float32)
-    proj = torch.as_tensor(np.asarray(calib_p, dtype=np.float32), device=bbox_reg.device)
-
-    boxes: list[tuple[float, float, float, float, float]] = []
-    with torch.no_grad():
-        for i in range(matched.n):
-            li = int(matched.loc_idx[i].item())
-            ai = int(matched.angle_idx[i].item())
-            score = float(matched.scores[i].item())
-            corner_off = reg[0, li, ai, car_idx].reshape(8, 3)
-            xz = locations_bev[li]
-            loc3d = torch.stack([xz[0], anchors_y[car_idx], xz[1]])
-            corners = corner_off + loc3d[None, :]
-            pts2d = project_rect_to_image(corners, proj)  # half-res (network) pixels
-            x0 = float(pts2d[:, 0].min().item()) / DOWNSCALE
-            y0 = float(pts2d[:, 1].min().item()) / DOWNSCALE
-            x1 = float(pts2d[:, 0].max().item()) / DOWNSCALE
-            y1 = float(pts2d[:, 1].max().item()) / DOWNSCALE
-            boxes.append((x0, y0, x1, y1, score))
-    return boxes
-
-
-def save_match_visualization(
-    out_path: Path,
-    left_full: torch.Tensor,
-    patch: torch.Tensor,
-    spec: FrameSpec,
-    boxes: list[tuple[float, float, float, float, float]],
-    f_u: float,
-    baseline_m: float,
-    opts: RunOpts,
-    resample: str,
-) -> None:
-    """Save full-res left image with patch + top-k proposal boxes overlaid."""
-    from PIL import ImageDraw, ImageFont
-
-    px0, py0, pw, ph = patch_rect(spec, opts.shape, opts.area_frac)
-    p = resize_patch(patch.detach().float().cpu(), ph, pw, resample)
-    if opts.quantize:
-        p = quantize_uint8(p)
-    left = left_full.detach().float().cpu()
-    left_p = paste_rect(left, p, px0, py0)
-    arr = (left_p.clamp(0, 1).permute(1, 2, 0).numpy() * 255.0).round().astype(np.uint8)
-    img = Image.fromarray(arr)
-    draw = ImageDraw.Draw(img)
-    try:
-        font = ImageFont.load_default()
-    except Exception:
-        font = None
-
-    # Pasted patch region (cyan).
-    draw.rectangle([px0, py0, px0 + pw, py0 + ph], outline=(0, 255, 255), width=3)
-    draw.text((px0, max(0, py0 - 14)), f"patch {pw}x{ph}", fill=(0, 255, 255), font=font)
-
-    # Top proposals by score (red / orange / yellow by rank).
-    colors = [(255, 40, 40), (255, 140, 0), (255, 220, 0)]
-    for i, (x0, y0, x1, y1, score) in enumerate(boxes):
-        color = colors[i % len(colors)]
-        draw.rectangle([x0, y0, x1, y1], outline=color, width=3)
-        draw.text(
-            (x0, max(0, y0 - 14)),
-            f"#{i+1} s={score:.3f}",
-            fill=color,
-            font=font,
-        )
-
-    # Target BEV center projected with depth_m (green cross) — approximate.
-    # Uses patch depth; enough to show which car we aimed at.
-    _ = f_u, baseline_m  # kept for API symmetry / future stereo overlays
-    cx, cy = spec.center_x, spec.center_y
-    r = 10
-    draw.line([cx - r, cy, cx + r, cy], fill=(0, 255, 0), width=2)
-    draw.line([cx, cy - r, cx, cy + r], fill=(0, 255, 0), width=2)
-    draw.text((cx + 12, cy - 10), f"target z={spec.loc_z:.1f}", fill=(0, 255, 0), font=font)
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(out_path)
-
-
-def frame_weight(depth_m: float, opts: RunOpts) -> float:
-    """Per-frame loss multiplier based on target depth.
-
-    "none"  always 1.0.
-    "inv"   w = clamp(near_ref_depth / depth_m, 1.0, near_max_weight);
-            frames closer than near_ref_depth get ≥1× and farther frames
-            stay at 1.0 (so far frames are never de-emphasised).
-    "step"  w = near_boost if depth_m <= near_thresh else 1.0.
-    """
-    if opts.near_weight == "none":
-        return 1.0
-    d = max(depth_m, 0.1)
-    if opts.near_weight == "inv":
-        raw = opts.near_ref_depth / d
-        return float(min(opts.near_max_weight, max(1.0, raw)))
-    if opts.near_weight == "step":
-        return float(opts.near_boost) if d <= opts.near_thresh else 1.0
-    raise ValueError(f"unknown near_weight mode: {opts.near_weight!r}")
-
-
-def build_epoch_order(frames: list[FrameSpec], opts: RunOpts) -> list[FrameSpec]:
-    """Frame visiting order for one epoch.
-
-    Under `--near-emphasis loss` this is the plain shuffle the script has
-    always used. Under `sample`/`both` the same number of frames is redrawn
-    with probability proportional to frame_weight, so near frames receive more
-    optimizer *steps*.
-
-    That distinction matters because of Adam. With --grad-accum 1 each frame
-    gets its own step, and Adam's step is ~lr*m/sqrt(v): scaling one frame's
-    loss by w scales both m and sqrt(v), so the step size barely changes and a
-    per-frame loss weight is largely cancelled. Step count is not something
-    Adam normalises away, so resampling actually shifts the objective.
-
-    Frame count per epoch is held constant, so a resampled arm stays
-    comparable to an unweighted one in both step count and wall-clock.
-    """
-    if opts.near_weight == "none" or opts.near_emphasis == "loss":
-        order = frames[:]
-        random.shuffle(order)
-        return order
-    w = np.array([frame_weight(f.depth_m, opts) for f in frames], dtype=np.float64)
-    p = w / w.sum()
-    idx = np.random.choice(len(frames), size=len(frames), replace=True, p=p)
-    return [frames[int(i)] for i in idx]
-
-
-def evasion_loss(
-    logits: torch.Tensor, temperature: float, clamp_min: float | None
-) -> torch.Tensor:
-    """LSE over Car logits within the match radius.
-
-    `clamp_min` floors each logit so anchors already driven far negative stop
-    absorbing the gradient budget; None leaves logits unclamped.
-    """
+def evasion_loss(logits: torch.Tensor, temperature: float) -> torch.Tensor:
+    """LSE over Car logits within the match radius."""
     if logits.numel() == 0:
         return logits.new_zeros(())
     t = max(float(temperature), 1e-6)
-    x = logits if clamp_min is None else logits.clamp(min=float(clamp_min))
-    return t * torch.logsumexp(x / t, dim=0)
+    return t * torch.logsumexp(logits / t, dim=0)
 
 
 def car_logits_in_radius(
@@ -605,45 +231,6 @@ def calib_for_frame(calib_path: Path) -> tuple[Calibration, Calibration, float, 
     return calib, calib_r, f_u, baseline
 
 
-def frame_visible_fracs(
-    spec: FrameSpec, images_root: Path, shape: str, area_frac: float
-) -> tuple[float, float]:
-    """Fraction of the patch rectangle visible in the (left, right) image."""
-    rect = patch_rect(spec, shape, area_frac)
-    _, y0, w, h = rect
-    area = float(max(1, w * h))
-    _, _, f_u, baseline = calib_for_frame(images_root / "calib" / f"{spec.frame}.txt")
-    disp = f_u * baseline / spec.depth_m
-    right_rect = (right_x0_for(spec, shape, rect, disp), y0, w, h)
-    return visible_area_px(rect) / area, visible_area_px(right_rect) / area
-
-
-def filter_visible_frames(
-    frames: list[FrameSpec],
-    images_root: Path,
-    shape: str,
-    area_frac: float,
-    min_visible_frac: float,
-) -> tuple[list[FrameSpec], list[tuple[str, float, float]]]:
-    """Drop frames whose patch is not visible enough to carry a gradient.
-
-    A rear face can project fully outside the image when the target car has
-    drawn alongside the ego. `paste_rect` then returns the image untouched, so
-    the loss has no path back to the patch and `backward()` raises -- and the
-    `n_in_loss == 0` guard misses it, because the BEV anchors are still there.
-    Such a frame is also meaningless for the attack: there is nowhere to print.
-    """
-    kept: list[FrameSpec] = []
-    dropped: list[tuple[str, float, float]] = []
-    for spec in frames:
-        left_frac, right_frac = frame_visible_fracs(spec, images_root, shape, area_frac)
-        if min(left_frac, right_frac) <= max(0.0, min_visible_frac):
-            dropped.append((spec.frame, left_frac, right_frac))
-        else:
-            kept.append(spec)
-    return kept, dropped
-
-
 def count_nms_matched_cars(
     outputs: dict,
     cfg,
@@ -684,19 +271,33 @@ def count_nms_matched_cars(
     return n_match, max_s
 
 
+@dataclass
+class FrameResult:
+    """One pasted-frame forward through frozen DSGN."""
+
+    loss: torch.Tensor
+    max_s: float
+    n_anchors: int
+    n_nms: int = 0
+    nms_max: float = 0.0
+
+
 def run_frame(
     model: nn.Module,
     cfg,
     locations_bev: torch.Tensor,
     z: torch.Tensor,
-    spec: FrameSpec,
+    spec: FacePlacement,
     images_root: Path,
     device: torch.device,
-    opts: RunOpts,
-    log_nms: bool = False,
-    vis_path: Path | None = None,
-) -> tuple[torch.Tensor, float, int, int, float]:
-    """Returns (loss, max_car_prob, n_anchors, n_nms_match, nms_max_s)."""
+    area_frac: float,
+    *,
+    nms: bool = False,
+) -> FrameResult:
+    """Paste the patch, run DSGN, return evasion loss and closest-car score.
+
+    `nms=True` also counts post-NMS Car dets near the target (eval only).
+    """
     left_path = images_root / "image_2" / f"{spec.frame}.png"
     right_path = images_root / "image_3" / f"{spec.frame}.png"
     calib_path = images_root / "calib" / f"{spec.frame}.txt"
@@ -708,19 +309,8 @@ def run_frame(
     calib, calib_r, f_u, baseline = calib_for_frame(calib_path)
 
     p = torch.sigmoid(z)
-    resample = random.choice(RESAMPLE_MODES) if opts.resample == "random" else opts.resample
     img_l, img_r, image_size = prepare_stereo_pair(
-        left,
-        right,
-        p,
-        spec,
-        f_u,
-        baseline,
-        device,
-        shape=opts.shape,
-        area_frac=opts.area_frac,
-        resample=resample,
-        quantize=opts.quantize,
+        left, right, p, spec, f_u, baseline, device, area_frac
     )
 
     calibs_fu = torch.tensor([float(calib.f_u)], device=device, dtype=torch.float32)
@@ -738,39 +328,26 @@ def run_frame(
         locations_bev,
         spec.loc_x,
         spec.loc_z,
-        opts.match_radius,
+        MATCH_RADIUS_M,
         num_classes=int(cfg.num_classes),
         num_angles=int(cfg.num_angles),
     )
     with torch.no_grad():
         max_s = float(logits_all.sigmoid().max().item()) if logits_all.numel() else 0.0
 
-    loss = evasion_loss(logits_all, opts.temperature, opts.logit_clamp)
-    n_anchors = int(logits_all.numel())
-
     n_nms, nms_max = 0, 0.0
-    if log_nms:
+    if nms:
         n_nms, nms_max = count_nms_matched_cars(
-            outputs, cfg, image_size, calib.P, spec.loc_x, spec.loc_z, opts.match_radius
+            outputs, cfg, image_size, calib.P, spec.loc_x, spec.loc_z, MATCH_RADIUS_M
         )
-    if vis_path is not None:
-        proposals = top_car_proposals(
-            outputs["bbox_cls"],
-            locations_bev,
-            spec.loc_x,
-            spec.loc_z,
-            opts.match_radius,
-            num_classes=int(cfg.num_classes),
-            num_angles=int(cfg.num_angles),
-            k=VIS_TOP_K,
-        )
-        boxes = decode_matched_boxes2d(
-            outputs["bbox_reg"], proposals, locations_bev, cfg, calib.P
-        )
-        save_match_visualization(
-            vis_path, left, p, spec, boxes, f_u, baseline, opts, resample
-        )
-    return loss, max_s, n_anchors, n_nms, nms_max
+
+    return FrameResult(
+        loss=evasion_loss(logits_all, LSE_TEMPERATURE),
+        max_s=max_s,
+        n_anchors=int(logits_all.numel()),
+        n_nms=n_nms,
+        nms_max=nms_max,
+    )
 
 
 class Tee:
@@ -850,14 +427,11 @@ def load_z_init(
     path: Path,
     patch_size: int,
     device: torch.device,
-    *,
-    start_epoch: int = 0,
 ) -> ResumeState:
     """Load learnable logits `z` from a prior run (.pt preferred) or a patch PNG.
 
-    Absolute epoch numbering: if the .pt stores `epoch`, the next training loop
-    starts at epoch+1. Old checkpoints without metadata use `--start-epoch`
-    (passed as `start_epoch`). `--epochs` always means additional epochs to run.
+    If the .pt stores `epoch`, the next training loop starts at epoch+1.
+    Old checkpoints without that field resume from epoch 0.
     """
     path = path.expanduser().resolve()
     if not path.is_file():
@@ -902,7 +476,7 @@ def load_z_init(
         ).squeeze(0)
         print(f"resized resumed patch to {patch_size}x{patch_size}")
 
-    epoch = meta_epoch if meta_epoch is not None else int(start_epoch)
+    epoch = meta_epoch if meta_epoch is not None else 0
     return ResumeState(
         z=z.detach().to(device).requires_grad_(True),
         epoch=epoch,
@@ -911,288 +485,34 @@ def load_z_init(
     )
 
 
-def split_frames(
-    frames: list[FrameSpec],
-    val_frac: float,
-    mode: str = "contiguous",
-) -> tuple[list[FrameSpec], list[FrameSpec]]:
-    """Hold out `val_frac` of frames.
-
-    contiguous  last N rows (legacy; near-heavy on this CSV's depth order).
-    strided     every k-th row (k ≈ 1/val_frac), so train/val share the depth mix.
-    """
-    n = len(frames)
-    n_val = max(1, int(round(n * val_frac))) if n > 1 else 0
-    if n_val == 0:
-        return frames, []
-    if mode == "contiguous":
-        return frames[:-n_val], frames[-n_val:]
-    if mode == "strided":
-        # Take every k-th index as val, targeting ~val_frac. Prefer the denser
-        # stride that still yields at least n_val when possible.
-        k = max(2, int(round(1.0 / max(val_frac, 1e-6))))
-        val_idx = set(range(k - 1, n, k))
-        # If rounding under-shot, fill extras evenly from remaining indices.
-        if len(val_idx) < n_val:
-            remaining = [i for i in range(n) if i not in val_idx]
-            need = n_val - len(val_idx)
-            step = max(1, len(remaining) // need)
-            val_idx.update(remaining[::step][:need])
-        elif len(val_idx) > n_val:
-            val_idx = set(sorted(val_idx)[:n_val])
-        train = [f for i, f in enumerate(frames) if i not in val_idx]
-        val = [f for i, f in enumerate(frames) if i in val_idx]
-        return train, val
-    raise ValueError(f"unknown split mode: {mode}")
-
-
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument(
-        "--images",
-        type=Path,
-        default=ROOT / "dsgn/datasets/adria/training_kitti_labels",
-        help="Clean KITTI-layout dataset (image_2, image_3, calib)",
-    )
-    p.add_argument(
-        "--csv",
-        type=Path,
-        default=ROOT / "dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv",
-        help="Closest-car patch placement CSV",
-    )
-    p.add_argument(
-        "--cfg",
-        type=Path,
-        default=ROOT / "dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py",
-    )
-    p.add_argument(
-        "--loadmodel",
-        type=Path,
-        default=ROOT / "dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar",
-    )
-    p.add_argument(
-        "--out",
-        type=Path,
-        default=ROOT / "dsgn/datasets/adria/2.training_patch_optimization/optimize",
-    )
-    p.add_argument("--patch-size", type=int, default=64)
+    p.add_argument("--images", type=Path, default=ROOT / "dsgn/datasets/adria/patch_train/dataset")
+    p.add_argument("--csv", type=Path, default=ROOT / "dsgn/datasets/adria/patch_train/train.csv")
+    p.add_argument("--val-csv", type=Path, default=ROOT / "dsgn/datasets/adria/patch_train/val.csv")
+    p.add_argument("--cfg", type=Path, default=ROOT / "dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py")
+    p.add_argument("--loadmodel", type=Path, default=ROOT / "dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar")
+    p.add_argument("--out", type=Path, default=ROOT / "dsgn/datasets/adria/patch_train/face050")
+    p.add_argument("--area-frac", type=float, default=0.50)
+    p.add_argument("--epochs", type=int, default=5,
+                   help="Epochs to run (additive when --resume is set)")
     p.add_argument("--lr", type=float, default=1e-2)
-    p.add_argument(
-        "--epochs",
-        type=int,
-        default=5,
-        help="Number of epochs to run in this invocation (additional when "
-        "--resume is set). Absolute epoch IDs continue from the resumed "
-        "checkpoint's stored epoch (or from --start-epoch).",
-    )
-    p.add_argument(
-        "--save-every",
-        type=int,
-        default=10,
-        help="Save patch_epochXXX.png/.pt every N absolute epochs (also always "
-        "on the last epoch of this run). On val improvement also writes "
-        "patch_best.* and patch_best_epochXXX.*",
-    )
-    p.add_argument("--val-frac", type=float, default=0.2)
-    p.add_argument(
-        "--split",
-        choices=("contiguous", "strided"),
-        default="contiguous",
-        help="'contiguous' (default) holds out the last val-frac of CSV rows. "
-        "'strided' holds out every k-th row so train/val share the depth mix. "
-        "Ignored when --val-csv is given.",
-    )
-    p.add_argument(
-        "--val-csv",
-        type=Path,
-        default=None,
-        help="Validate on this CSV instead of splitting --csv. Use it to hold "
-        "out a whole driving event: these CSVs come from continuous video, so "
-        "adjacent frames are near-duplicates and both --split modes leak them "
-        "across the boundary, making val_max_s optimistic.",
-    )
-    p.add_argument(
-        "--start-epoch",
-        type=int,
-        default=0,
-        help="Fallback last-completed global epoch when --resume points at an "
-        "old .pt/.png with no stored epoch metadata. Ignored when the "
-        "checkpoint already has an 'epoch' field. Next loop starts at start-epoch+1.",
-    )
-    p.add_argument("--temperature", type=float, default=1.0, help="LSE temperature")
-    p.add_argument(
-        "--logit-clamp",
-        type=float,
-        default=None,
-        help="Floor each logit at this value (e.g. -2.0) so already-dead anchors "
-        "stop absorbing gradient. Unset = unclamped.",
-    )
-    p.add_argument(
-        "--shape",
-        choices=("square", "face"),
-        default="square",
-        help="'square' keeps the CSV size/centre (original behaviour). 'face' "
-        "covers --area-frac of the rear-face box at its own aspect ratio, "
-        "centred on that box.",
-    )
-    p.add_argument(
-        "--area-frac",
-        type=float,
-        default=0.23,
-        help="Rear-face area covered under --shape face. 0.23 is the area "
-        "equivalent of the original square (0.50 of the face's shorter side).",
-    )
-    p.add_argument(
-        "--grad-accum",
-        type=int,
-        default=1,
-        help="Frames to accumulate before an optimizer step. 1 (default) steps "
-        "per frame as before; >1 trades update count for a less frame-specific "
-        "gradient direction.",
-    )
-    p.add_argument(
-        "--resample",
-        choices=(*RESAMPLE_MODES, "random"),
-        default="bilinear",
-        help="Filter used to render the patch at target size. Only 'bilinear' "
-        "has verified parity with the apply step (pair it with "
-        "apply_stereo_patches --patch-resample bilinear). 'random' varies the "
-        "filter per frame so the patch does not depend on any single one.",
-    )
-    p.add_argument(
-        "--quantize",
-        action="store_true",
-        help="Round the pasted patch to 8-bit in-graph (straight-through), "
-        "matching the uint8 PNG that deployment actually writes.",
-    )
-    p.add_argument(
-        "--min-visible-frac",
-        type=float,
-        default=0.0,
-        help="Drop frames where the visible fraction of the patch (in either "
-        "image) is <= this. 0.0 drops only fully off-image faces, which would "
-        "otherwise crash the backward pass. Raise it to also skip frames where "
-        "the target car is mostly out of view.",
-    )
-    p.add_argument("--match-radius", type=float, default=2.0, help="BEV match radius (m)")
-    p.add_argument(
-        "--log-nms",
-        action="store_true",
-        help="Also log post-NMS matched Car count/score (val + progress prints)",
-    )
-    p.add_argument(
-        "--vis-every",
-        type=int,
-        default=0,
-        help="Save proposal overlays every N train steps (0=disable, default). "
-        "Also always saves step 1 and the last step of each epoch when >0.",
-    )
-    p.add_argument(
-        "--vis-val-max",
-        type=int,
-        default=0,
-        help="Max validation frames to visualize per epoch (0=disable, default)",
-    )
-    p.add_argument(
-        "--near-weight",
-        choices=("none", "inv", "step"),
-        default="none",
-        help="Per-frame loss weighting by depth. "
-        "'none' (default) weights all frames equally. "
-        "'inv' scales each frame's loss by clamp(near-ref-depth/depth, 1, near-max-weight) "
-        "so frames closer than near-ref-depth get ≥1× with a cap; farther frames stay at 1×. "
-        "'step' applies near-boost× to frames with depth≤near-thresh, 1× otherwise.",
-    )
-    p.add_argument(
-        "--near-thresh",
-        type=float,
-        default=15.0,
-        help="Depth threshold in metres for 'step' weighting and for the near/far "
-        "split in epoch logs (default 15 m, aligns with eval_patch.py bins).",
-    )
-    p.add_argument(
-        "--near-boost",
-        type=float,
-        default=5.0,
-        help="Loss multiplier for near frames under --near-weight step (default 5.0).",
-    )
-    p.add_argument(
-        "--near-ref-depth",
-        type=float,
-        default=15.0,
-        help="Reference depth (m) for --near-weight inv: at this depth w=1; "
-        "closer frames get w>1 (default 15 m).",
-    )
-    p.add_argument(
-        "--near-max-weight",
-        type=float,
-        default=10.0,
-        help="Cap on per-frame weight under --near-weight inv (default 10.0).",
-    )
-    p.add_argument(
-        "--near-emphasis",
-        choices=("loss", "sample", "both"),
-        default="loss",
-        help="How --near-weight is spent. 'loss' (default) scales each frame's "
-        "loss. With --grad-accum 1 that is largely cancelled by Adam, which "
-        "normalises the step by the gradient magnitude, so prefer 'sample': it "
-        "redraws the same number of frames per epoch with probability "
-        "proportional to the weight, giving near frames more optimizer steps "
-        "(which Adam cannot normalise away) at constant epoch cost. 'both' "
-        "applies the weight to sampling and to the loss.",
-    )
+    p.add_argument("--patch-size", type=int, default=64)
+    p.add_argument("--resume", type=Path, default=None)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="cuda:0")
-    p.add_argument("--max-frames", type=int, default=None, help="Optional cap after CSV load (debug)")
-    p.add_argument(
-        "--init",
-        choices=("color", "gray", "pixel"),
-        default="color",
-        help="Patch init when not using --resume: low-freq colour (default), uniform gray, "
-        "or high-freq pixel noise",
-    )
-    p.add_argument(
-        "--n-inits",
-        type=int,
-        default=1,
-        help="Independent random inits; keep the run with lowest val_max_s. "
-        "Ignored when --resume is set. Try 3–5 for a serious search.",
-    )
-    p.add_argument(
-        "--resume",
-        type=Path,
-        default=None,
-        help="Continue from a previous patch: patch_best.pt / patch_final.pt (preferred) "
-        "or a patch PNG. Overrides --init / --n-inits. Absolute epoch numbering "
-        "continues from the checkpoint's stored epoch (else --start-epoch); "
-        "--epochs is how many more epochs to run.",
-    )
     return p.parse_args()
 
 
-def make_z_init(
-    kind: str,
-    patch_size: int,
-    device: torch.device,
-    seed: int,
-) -> torch.Tensor:
-    """Create learnable logits z for the shared patch."""
-    if kind == "gray":
-        return torch.zeros(3, patch_size, patch_size, device=device, requires_grad=True)
-
+def init_patch_z(patch_size: int, device: torch.device, seed: int) -> torch.Tensor:
+    """Low-frequency random colour patch, parameterised as logits."""
     g = torch.Generator(device=device)
     g.manual_seed(int(seed))
-
-    if kind == "pixel":
-        z = torch.randn(3, patch_size, patch_size, generator=g, device=device) * 0.1
-        return z.requires_grad_(True)
-
-    # Default: low-frequency random colour (8×8 → bilinear upsample).
     small = torch.rand(1, 3, 8, 8, generator=g, device=device)
     p = F.interpolate(
         small, size=(patch_size, patch_size), mode="bilinear", align_corners=False
     ).squeeze(0)
-    p = 0.1 + 0.8 * p  # keep away from sigmoid saturation
+    p = 0.1 + 0.8 * p
     z = torch.logit(p.clamp(1e-4, 1.0 - 1e-4))
     return z.detach().requires_grad_(True)
 
@@ -1214,379 +534,132 @@ def main() -> int:
     print(f"started: {datetime.now().isoformat(timespec='seconds')}")
 
     cfg = load_cfg(args.cfg)
-    frames = load_csv(args.csv)
-    if args.max_frames is not None:
-        frames = frames[: args.max_frames]
-    if not frames:
-        raise RuntimeError("no frames to optimize")
 
-    n_before = len(frames)
-    frames, dropped = filter_visible_frames(
-        frames, args.images, args.shape, args.area_frac, args.min_visible_frac
+    train_frames, dropped = filter_visible_frames(
+        load_face_csv(args.csv), args.images, args.area_frac, MIN_VISIBLE_FRAC
     )
     if dropped:
-        print(
-            f"dropped {len(dropped)}/{n_before} frames whose patch is not visible "
-            f"(min_visible_frac={args.min_visible_frac}): the rear face projects "
-            f"off-image, so there is nothing to print on and no gradient."
-        )
-        for frame, lf, rf in dropped:
-            print(f"  drop {frame}  visible left={lf:.3f} right={rf:.3f}")
-    if not frames:
-        raise RuntimeError("every frame was dropped as not visible")
+        print(f"dropped {len(dropped)} off-image train frames")
+    if not train_frames:
+        raise RuntimeError("no visible train frames")
 
-    if args.val_csv is not None:
-        val_frames = load_csv(args.val_csv)
-        n_val_before = len(val_frames)
-        val_frames, val_dropped = filter_visible_frames(
-            val_frames, args.images, args.shape, args.area_frac, args.min_visible_frac
-        )
-        if val_dropped:
-            print(
-                f"--val-csv: dropped {len(val_dropped)}/{n_val_before} frames as not visible"
-            )
-        train_frames = frames
-        overlap = {f.frame for f in train_frames} & {f.frame for f in val_frames}
-        if overlap:
-            raise RuntimeError(
-                f"--val-csv shares {len(overlap)} frames with --csv "
-                f"(e.g. {sorted(overlap)[:5]}); the val split would leak"
-            )
-        print(f"val split: held-out CSV {args.val_csv} ({len(val_frames)} frames)")
-    else:
-        train_frames, val_frames = split_frames(frames, args.val_frac, mode=args.split)
-    n_inits = 1 if args.resume is not None else max(1, int(args.n_inits))
-    opts = RunOpts(
-        temperature=args.temperature,
-        logit_clamp=args.logit_clamp,
-        match_radius=args.match_radius,
-        shape=args.shape,
-        area_frac=args.area_frac,
-        resample=args.resample,
-        quantize=args.quantize,
-        near_weight=args.near_weight,
-        near_thresh=args.near_thresh,
-        near_boost=args.near_boost,
-        near_ref_depth=args.near_ref_depth,
-        near_max_weight=args.near_max_weight,
-        near_emphasis=args.near_emphasis,
+    val_frames, val_dropped = filter_visible_frames(
+        load_face_csv(args.val_csv), args.images, args.area_frac, MIN_VISIBLE_FRAC
     )
-    accum = max(1, int(args.grad_accum))
-    print(
-        f"frames: {len(frames)} total | train={len(train_frames)} val={len(val_frames)} | "
-        + (
-            f"split=val-csv({args.val_csv.name}) | "
-            if args.val_csv is not None
-            else f"split={args.split} val_frac={args.val_frac} | "
+    if val_dropped:
+        print(f"dropped {len(val_dropped)} off-image val frames")
+    overlap = {f.frame for f in train_frames} & {f.frame for f in val_frames}
+    if overlap:
+        raise RuntimeError(
+            f"--csv and --val-csv share {len(overlap)} frames "
+            f"(e.g. {sorted(overlap)[:5]})"
         )
-        + f"match_radius={args.match_radius} | "
-        + f"init={args.init if args.resume is None else 'resume'} n_inits={n_inits}"
-    )
-    near_desc = opts.near_weight
-    if opts.near_weight == "inv":
-        near_desc = (
-            f"inv(ref={opts.near_ref_depth}m cap={opts.near_max_weight}x)"
-        )
-    elif opts.near_weight == "step":
-        near_desc = f"step(thresh={opts.near_thresh}m boost={opts.near_boost}x)"
-    if opts.near_weight != "none":
-        near_desc += f" via={opts.near_emphasis}"
+
     print(
-        f"loss=LSE(logit) tau={opts.temperature}"
-        + (f" clamp={opts.logit_clamp}" if opts.logit_clamp is not None else "")
-        + f" | shape={opts.shape}"
-        + (f" area_frac={opts.area_frac}" if opts.shape == "face" else "")
-        + f" | near_weight={near_desc}"
-        + f" | grad_accum={accum} resample={opts.resample} quantize={opts.quantize}"
+        f"train={len(train_frames)} val={len(val_frames)} | "
+        f"area_frac={args.area_frac} | "
+        f"match_radius={MATCH_RADIUS_M}m tau={LSE_TEMPERATURE}"
     )
 
     model = load_model(cfg, args.loadmodel, device)
     locations_bev = compute_locations_bev(
-        cfg.Z_MIN,
-        cfg.Z_MAX,
-        cfg.VOXEL_Z_SIZE,
-        cfg.X_MIN,
-        cfg.X_MAX,
-        cfg.VOXEL_X_SIZE,
-        device,
+        cfg.Z_MIN, cfg.Z_MAX, cfg.VOXEL_Z_SIZE,
+        cfg.X_MIN, cfg.X_MAX, cfg.VOXEL_X_SIZE, device,
     )
 
-    global_best_max: float | None = None
-    global_best_z: torch.Tensor | None = None
-    global_best_epoch: int | None = None
+    if args.resume is not None:
+        resumed = load_z_init(args.resume, args.patch_size, device)
+        z = resumed.z
+        epoch_offset = resumed.epoch
+        end_epoch = epoch_offset + args.epochs
+        best_val_max = resumed.best_val_max_s if resumed.best_val_max_s is not None else float("inf")
+        best_epoch = resumed.best_epoch
+        print(f"resumed from {args.resume} (epoch={resumed.epoch}, best_val_max_s={resumed.best_val_max_s})")
+        print(f"continuing for {args.epochs} more epochs → end at {end_epoch}")
+    else:
+        z = init_patch_z(args.patch_size, device, args.seed)
+        epoch_offset = 0
+        end_epoch = args.epochs
+        best_val_max = float("inf")
+        best_epoch = None
 
-    for trial in range(n_inits):
-        trial_seed = args.seed + trial
-        random.seed(trial_seed)
-        np.random.seed(trial_seed)
-        torch.manual_seed(trial_seed)
+    optim = torch.optim.Adam([z], lr=args.lr)
+    save_patch(z, args.out, "patch_init", epoch=epoch_offset)
+    if args.resume is not None and best_epoch is not None and best_val_max != float("inf"):
+        meta = dict(epoch=epoch_offset, best_epoch=best_epoch, best_val_max_s=best_val_max)
+        save_patch(z, args.out, "patch_best", **meta)
+        save_patch(z, args.out, f"patch_best_epoch{best_epoch:03d}", **meta)
 
-        trial_out = args.out if n_inits == 1 else args.out / f"trial{trial:02d}"
-        trial_out.mkdir(parents=True, exist_ok=True)
-        vis_root = trial_out / "vis"
-        if n_inits > 1:
-            print(f"\n=== trial {trial + 1}/{n_inits} (seed={trial_seed}) → {trial_out} ===")
+    for local_i, epoch in enumerate(range(epoch_offset + 1, end_epoch + 1), 1):
+        order = train_frames[:]
+        random.shuffle(order)
+        train_losses: list[float] = []
+        n_skip = 0
 
-        if args.resume is not None:
-            resumed = load_z_init(
-                args.resume, args.patch_size, device, start_epoch=args.start_epoch
+        for i, spec in enumerate(order, 1):
+            out = run_frame(
+                model, cfg, locations_bev, z, spec, args.images, device, args.area_frac
             )
-            z = resumed.z
-            epoch_offset = resumed.epoch
-            print(
-                f"resumed z from {args.resume} "
-                f"(saved epoch={resumed.epoch}"
-                + (
-                    f", best_epoch={resumed.best_epoch}, "
-                    f"best_val_max_s={resumed.best_val_max_s:.4f}"
-                    if resumed.best_epoch is not None and resumed.best_val_max_s is not None
-                    else (
-                        f", best_epoch={resumed.best_epoch}"
-                        if resumed.best_epoch is not None
-                        else ""
-                    )
-                )
-                + ")"
-            )
-            end_epoch = epoch_offset + args.epochs
-            print(
-                f"continuing from global epoch {epoch_offset + 1} for "
-                f"{args.epochs} more epochs → will end at {end_epoch}"
-            )
-            best_val_max = (
-                resumed.best_val_max_s
-                if resumed.best_val_max_s is not None
-                else float("inf")
-            )
-            best_val_lse = float("inf")
-            best_epoch = resumed.best_epoch
-        else:
-            z = make_z_init(args.init, args.patch_size, device, seed=trial_seed)
-            epoch_offset = 0
-            end_epoch = args.epochs
-            best_val_max = float("inf")
-            best_val_lse = float("inf")
-            best_epoch = None
-
-        optim = torch.optim.Adam([z], lr=args.lr)
-        save_patch(z, trial_out, "patch_init", epoch=epoch_offset)
-        # Seed best pointers from the resumed weights so a new --out still has a
-        # usable patch_best even if this run never beats the restored score.
-        if args.resume is not None and best_epoch is not None and best_val_max != float("inf"):
-            meta = dict(
-                epoch=epoch_offset,
-                best_epoch=best_epoch,
-                best_val_max_s=best_val_max,
-            )
-            save_patch(z, trial_out, "patch_best", **meta)
-            save_patch(z, trial_out, f"patch_best_epoch{best_epoch:03d}", **meta)
-
-        def _run(spec: FrameSpec, *, log_nms: bool, vis_path: Path | None = None):
-            return run_frame(
-                model,
-                cfg,
-                locations_bev,
-                z,
-                spec,
-                args.images,
-                device,
-                opts,
-                log_nms=log_nms,
-                vis_path=vis_path,
-            )
-
-        for local_i, epoch in enumerate(range(epoch_offset + 1, end_epoch + 1), 1):
-            order = build_epoch_order(train_frames, opts)
-            n_drawn_near = sum(1 for f in order if f.depth_m <= opts.near_thresh)
-            train_losses: list[float] = []
-            train_max: list[float] = []
-            train_near_max: list[float] = []  # max_s for frames <= near_thresh
-            train_far_max: list[float] = []   # max_s for frames >  near_thresh
-            n_skip = 0
-            n_nograd = 0
-            epoch_vis = vis_root / f"epoch{epoch:03d}"
-
-            optim.zero_grad(set_to_none=True)
-            pending = 0
-            for i, spec in enumerate(order, 1):
-                do_log = args.log_nms and (i == 1 or i % 20 == 0 or i == len(order))
-                do_vis = args.vis_every > 0 and (
-                    i == 1 or i == len(order) or (i % args.vis_every == 0)
-                )
-                vis_path = None
-                if do_vis:
-                    vis_path = epoch_vis / "train" / f"{spec.frame}_step{i:04d}.png"
-                loss, max_s, n_anchors, n_nms, nms_max = _run(
-                    spec, log_nms=do_log, vis_path=vis_path
-                )
-                # Record the score even when no anchors fall in radius.
-                train_max.append(max_s)
-                if spec.depth_m <= opts.near_thresh:
-                    train_near_max.append(max_s)
-                else:
-                    train_far_max.append(max_s)
-                if n_anchors == 0 or not loss.requires_grad:
-                    # No grad path means the patch never reached the image for
-                    # this frame; backward() would raise instead of skipping.
-                    if n_anchors != 0:
-                        n_nograd += 1
-                    train_losses.append(0.0)
-                    n_skip += 1
-                else:
-                    w = (
-                        frame_weight(spec.depth_m, opts)
-                        if opts.near_emphasis in ("loss", "both")
-                        else 1.0
-                    )
-                    (loss * w / accum).backward()
-                    pending += 1
-                    train_losses.append(float(loss.item()))
-                if pending >= accum or i == len(order):
-                    if pending:
-                        optim.step()
-                    optim.zero_grad(set_to_none=True)
-                    pending = 0
-                if i == 1 or i % 20 == 0 or i == len(order):
-                    extra = ""
-                    if do_log:
-                        extra = f" nms_match={n_nms} nms_max={nms_max:.4f}"
-                    if do_vis:
-                        extra += f" vis={vis_path.name}"
-                    w_str = ""
-                    if opts.near_weight != "none" and opts.near_emphasis in ("loss", "both"):
-                        w_str = f" w={frame_weight(spec.depth_m, opts):.2f}"
-                    print(
-                        f"  epoch {epoch} [{i}/{len(order)}] frame={spec.frame} "
-                        f"depth={spec.depth_m:.1f}m{w_str} "
-                        f"loss={train_losses[-1]:.4f} max_s={train_max[-1]:.4f} "
-                        f"anchors={n_anchors}{extra}"
-                    )
-
-            val_losses: list[float] = []
-            val_max: list[float] = []
-            val_near_max: list[float] = []
-            val_far_max: list[float] = []
-            val_nms_gone = 0
-            with torch.no_grad():
-                for vi, spec in enumerate(val_frames):
-                    vis_path = None
-                    if args.vis_val_max > 0 and vi < args.vis_val_max:
-                        vis_path = epoch_vis / "val" / f"{spec.frame}.png"
-                    loss, max_s, n_anchors, n_nms, nms_max = _run(
-                        spec, log_nms=args.log_nms, vis_path=vis_path
-                    )
-                    val_losses.append(float(loss.item()) if n_anchors else 0.0)
-                    val_max.append(max_s)
-                    if spec.depth_m <= opts.near_thresh:
-                        val_near_max.append(max_s)
-                    else:
-                        val_far_max.append(max_s)
-                    if args.log_nms and n_nms == 0:
-                        val_nms_gone += 1
-
-            train_l = float(np.mean(train_losses)) if train_losses else 0.0
-            val_l = float(np.mean(val_losses)) if val_losses else float("nan")
-            val_m = float(np.mean(val_max)) if val_max else 0.0
-            val_near_m = float(np.mean(val_near_max)) if val_near_max else float("nan")
-            val_far_m = float(np.mean(val_far_max)) if val_far_max else float("nan")
-            train_near_m = float(np.mean(train_near_max)) if train_near_max else float("nan")
-            train_far_m = float(np.mean(train_far_max)) if train_far_max else float("nan")
-            msg = (
-                f"epoch {epoch}/{end_epoch} (+{local_i}/{args.epochs} this run)  "
-                f"train_LSE={train_l:.4f}  "
-                f"val_LSE={val_l:.4f}  val_max_s={val_m:.4f}  "
-                f"val_near(≤{opts.near_thresh:.0f}m)={val_near_m:.4f}  "
-                f"val_far={val_far_m:.4f}  "
-                f"train_near={train_near_m:.4f}  train_far={train_far_m:.4f}  "
-                f"train_skip0={n_skip}/{len(order)}"
-            )
-            if opts.near_emphasis in ("sample", "both") and opts.near_weight != "none":
-                msg += f"  drawn_near={n_drawn_near}/{len(order)}"
-            if n_nograd:
-                msg += f"  WARN_nograd={n_nograd}"
-            if args.log_nms and val_frames:
-                msg += f"  val_nms_gone={val_nms_gone}/{len(val_frames)}"
-            if args.vis_every > 0 or args.vis_val_max > 0:
-                msg += f"  vis→{epoch_vis}"
-            print(msg)
-            # Periodic absolute-epoch snapshots; stamp best with its epoch too.
-            save_every = max(1, int(args.save_every))
-            if epoch % save_every == 0 or epoch == end_epoch:
-                save_patch(
-                    z,
-                    trial_out,
-                    f"patch_epoch{epoch:03d}",
-                    epoch=epoch,
-                    best_epoch=best_epoch,
-                    best_val_max_s=None if best_val_max == float("inf") else best_val_max,
-                )
-                print(f"  saved patch_epoch{epoch:03d}")
-            if val_frames and val_m <= best_val_max:
-                best_val_max = val_m
-                best_val_lse = val_l
-                best_epoch = epoch
-                meta = dict(
-                    epoch=epoch,
-                    best_epoch=epoch,
-                    best_val_max_s=best_val_max,
-                )
-                save_patch(z, trial_out, "patch_best", **meta)
-                save_patch(z, trial_out, f"patch_best_epoch{epoch:03d}", **meta)
+            if out.n_anchors == 0 or not out.loss.requires_grad:
+                train_losses.append(0.0)
+                n_skip += 1
+            else:
+                out.loss.backward()
+                optim.step()
+                optim.zero_grad(set_to_none=True)
+                train_losses.append(float(out.loss.item()))
+            if i == 1 or i % 20 == 0 or i == len(order):
                 print(
-                    f"  saved patch_best + patch_best_epoch{epoch:03d} "
-                    f"(val_max_s={best_val_max:.4f} val_LSE={best_val_lse:.4f})"
+                    f"  epoch {epoch} [{i}/{len(order)}] frame={spec.frame} "
+                    f"depth={spec.depth_m:.1f}m loss={train_losses[-1]:.4f} "
+                    f"max_s={out.max_s:.4f} anchors={out.n_anchors}"
                 )
 
-        save_patch(
-            z,
-            trial_out,
-            "patch_final",
-            epoch=end_epoch,
-            best_epoch=best_epoch,
-            best_val_max_s=None if best_val_max == float("inf") else best_val_max,
-        )
-        trial_score = best_val_max if val_frames else best_val_lse
+        val_losses: list[float] = []
+        val_max: list[float] = []
+        val_near: list[float] = []
+        val_far: list[float] = []
+        with torch.no_grad():
+            for spec in val_frames:
+                out = run_frame(
+                    model, cfg, locations_bev, z, spec, args.images, device, args.area_frac
+                )
+                val_losses.append(float(out.loss.item()) if out.n_anchors else 0.0)
+                val_max.append(out.max_s)
+                (val_near if spec.depth_m <= NEAR_DEPTH_M else val_far).append(out.max_s)
+
+        val_m = float(np.mean(val_max)) if val_max else 0.0
         print(
-            f"trial {trial + 1}/{n_inits} done  best_val_max_s={trial_score:.4f}"
-            + (f"  best_epoch={best_epoch}" if best_epoch is not None else "")
+            f"epoch {epoch}/{end_epoch} (+{local_i}/{args.epochs})  "
+            f"train_LSE={np.mean(train_losses):.4f}  val_LSE={np.mean(val_losses):.4f}  "
+            f"val_max_s={val_m:.4f}  "
+            f"val_near(≤{NEAR_DEPTH_M:.0f}m)={np.mean(val_near) if val_near else float('nan'):.4f}  "
+            f"val_far={np.mean(val_far) if val_far else float('nan'):.4f}  "
+            f"train_skip0={n_skip}/{len(order)}"
         )
-        if global_best_max is None or trial_score < global_best_max:
-            global_best_max = trial_score
-            global_best_z = z.detach().cpu().clone()
-            global_best_epoch = best_epoch
-            meta = dict(
-                epoch=end_epoch if best_epoch is None else best_epoch,
-                best_epoch=best_epoch,
-                best_val_max_s=global_best_max,
-            )
-            save_patch(z, args.out, "patch_best", **meta)
-            if best_epoch is not None:
-                save_patch(z, args.out, f"patch_best_epoch{best_epoch:03d}", **meta)
-            if n_inits > 1:
-                print(
-                    f"  new global best → {args.out}/patch_best.* "
-                    f"(val_max_s={global_best_max:.4f}"
-                    + (f" epoch={best_epoch}" if best_epoch is not None else "")
-                    + ")"
-                )
 
-    if global_best_z is not None:
-        # Ensure top-level final mirrors the best trial.
-        z_final = global_best_z.to(device).requires_grad_(False)
-        save_patch(
-            z_final,
-            args.out,
-            "patch_final",
-            epoch=end_epoch if n_inits == 1 else (global_best_epoch or end_epoch),
-            best_epoch=global_best_epoch,
-            best_val_max_s=global_best_max,
-        )
-        if n_inits > 1:
-            print(
-                f"selected best of {n_inits} inits: val_max_s={global_best_max:.4f}"
-                + (f" epoch={global_best_epoch}" if global_best_epoch is not None else "")
+        if epoch % SAVE_EVERY == 0 or epoch == end_epoch:
+            save_patch(
+                z, args.out, f"patch_epoch{epoch:03d}", epoch=epoch,
+                best_epoch=best_epoch,
+                best_val_max_s=None if best_val_max == float("inf") else best_val_max,
             )
-    print(f"done. outputs in {args.out}")
+            print(f"  saved patch_epoch{epoch:03d}")
+
+        if val_frames and val_m <= best_val_max:
+            best_val_max = val_m
+            best_epoch = epoch
+            meta = dict(epoch=epoch, best_epoch=epoch, best_val_max_s=best_val_max)
+            save_patch(z, args.out, "patch_best", **meta)
+            save_patch(z, args.out, f"patch_best_epoch{epoch:03d}", **meta)
+            print(f"  saved patch_best (val_max_s={best_val_max:.4f})")
+
+    save_patch(
+        z, args.out, "patch_final", epoch=end_epoch,
+        best_epoch=best_epoch,
+        best_val_max_s=None if best_val_max == float("inf") else best_val_max,
+    )
+    print(f"done. best_val_max_s={best_val_max:.4f} → {args.out}")
     return 0
 
 

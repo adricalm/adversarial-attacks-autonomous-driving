@@ -6,7 +6,7 @@ environment — unpatched frames will have spurious extra detections if you take
 new folder wholesale.
 
 Example:
-  python3 scripts/merge_dsgn_outputs.py \\
+  python3 scripts/dsgn/merge_dsgn_outputs.py \\
     --baseline src/dsgn_offline/resource/awsim_output_offline \\
     --patched  dsgn/detections/adria/patched_100_135 \\
     --output   src/dsgn_offline/resource/awsim_output_patched_merged \\

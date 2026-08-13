@@ -3,9 +3,9 @@
 #
 #
 # Usage:
-#   bash scripts/dsgn_train.sh
-#   DEBUG=1 EPOCHS=1 bash scripts/dsgn_train.sh   # smoke test
-#   FORCE_TARGETS=1 bash scripts/dsgn_train.sh      # re-run generate_targets
+#   bash scripts/dsgn/dsgn_train.sh
+#   DEBUG=1 EPOCHS=1 bash scripts/dsgn/dsgn_train.sh   # smoke test
+#   FORCE_TARGETS=1 bash scripts/dsgn/dsgn_train.sh      # re-run generate_targets
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -29,7 +29,7 @@ START_EPOCH="${START_EPOCH:-1}"
 FORCE_TARGETS="${FORCE_TARGETS:-0}"
 
 if [[ ! -f "${VENV}/bin/activate" ]]; then
-  echo "DSGN venv missing. Run: bash ${ROOT}/scripts/dsgn_setup_venv.sh" >&2
+  echo "DSGN venv missing. Run: bash ${ROOT}/scripts/dsgn/dsgn_setup_venv.sh" >&2
   exit 1
 fi
 

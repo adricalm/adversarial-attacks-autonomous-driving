@@ -59,7 +59,7 @@ alpha   = wrap(ry - atan2(x, z))
 # type, trunc, occ, 2D bbox, x, z unchanged
 ```
 
-Script: `scripts/dsgn_transform_label.py`  
+Script: `scripts/dsgn/dsgn_transform_label.py`  
 ### Dataset layout on this machine (Jul 2026)
 
 | Path | Role |
@@ -90,7 +90,7 @@ Always: converted `label_2` under `training_kitti_labels`, `FORCE_TARGETS=1` whe
 
 ### Full-model train (host) — Arka-style schedule
 
-Uses `scripts/dsgn_train.sh` (full net, lr≈1e-3, 60 ep). Same converted data as det_head:
+Uses `scripts/dsgn/dsgn_train.sh` (full net, lr≈1e-3, 60 ep). Same converted data as det_head:
 
 ```bash
 FORCE_TARGETS=1 EPOCHS=60 \
@@ -98,7 +98,7 @@ DATA_PATH=~/summer26/dsgn/datasets/adria/training_kitti_labels \
 SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/trainval.txt \
 LOADMODEL=~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar \
 SAVEMODEL=~/summer26/dsgn/checkpoints/adria/kitti48_awsim_full_kitti_labels \
-bash ~/summer26/scripts/dsgn_train.sh
+bash ~/summer26/scripts/dsgn/dsgn_train.sh
 ```
 
 (`dsgn_finetune_awsim.sh` with `MODE=gentle|det_head` was removed; use `dsgn_train.sh` for full-model adapt instead.)

@@ -2,27 +2,24 @@
 """Localize physically plausible rear-face patches from DSGN KITTI detections.
 
 For each detection, project the 3D box, pick the vertical face closest to the
-ego camera (smallest mean depth), and write a square patch (center + size)
-that fits inside that face's 2D projection.
+ego camera (smallest mean depth), and write that face's 2D AABB.
 
-CSV is compatible with scripts/apply_stereo_patches.py:
-  frame,center_x,center_y,size,depth_m,seed
-Extra columns (ignored by apply): det_idx,score,face_w,face_h,x0,y0,x1,y1,loc_x,loc_z,ego_dist
+CSV columns used by optimize_patch.py and apply_face_patch.py:
+  frame,depth_m,score,x0,y0,x1,y1,loc_x,loc_z,ego_dist
 
 Closest selection uses bird's-eye distance hypot(loc_x, loc_z), not rear-face
 depth alone — so a near lead car wins over a far neighbor.
 
-Note: apply_stereo_patches currently keeps one patch per frame (last CSV row
-wins). Default --selection closest emits one row/frame so apply works as-is.
-Use --selection all for multi-det CSVs (optimizer / future multi-patch apply).
+Default --selection closest emits one row per frame. Use --selection all for
+multi-det CSVs (optimizer only; apply_face_patch expects one row per frame).
 
 Examples
 --------
   # Closest car only → apply-ready CSV
   python3 scripts/patch_optimization/localize_patches.py \\
-    --detections src/dsgn_offline/resource/awsim_output_offline_no_finetune \\
-    --calib dsgn/datasets/arka/dsgn_awsim/testing_offline/calib \\
-    --output dsgn/datasets/adria/1.patch_optimization/patches_localized.csv \\
+    --detections dsgn/detections/adria/train_recordings_clean/train_frontal1 \\
+    --calib dsgn/datasets/recordings/train_frontal1/calib \\
+    --output dsgn/datasets/recordings/train_frontal1/patches_localized.csv \\
     --box-convention kitti --selection closest
 """
 from __future__ import annotations
@@ -35,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
-# Vertical faces as corner-index quads (order matches visualize_dsgn_detections).
+# Vertical faces as corner-index quadrilaterals (order matches visualize_dsgn_detections).
 # KITTI object frame: x=length, y=up(-), z=width. AWSIM: z=length, y=height, x=width.
 FACES_KITTI = (
     (0, 1, 5, 4),  # +X length
@@ -50,14 +47,12 @@ FACES_AWSIM = (
     (3, 2, 6, 7),  # -X width
 )
 
-IMAGE_WIDTH = 1920
 IMAGE_HEIGHT = 1080
 
 
 @dataclass
 class Detection:
     type: str
-    bbox: tuple[float, float, float, float]
     dimensions: tuple[float, float, float]
     location: tuple[float, float, float]
     rotation_y: float
@@ -67,15 +62,8 @@ class Detection:
 @dataclass
 class PatchRow:
     frame: str
-    det_idx: int
-    center_x: float
-    center_y: float
-    size: int
     depth_m: float
-    seed: int
     score: float | None
-    face_w: float
-    face_h: float
     x0: float
     y0: float
     x1: float
@@ -87,6 +75,10 @@ class PatchRow:
     def ego_dist(self) -> float:
         """Bird's-eye distance from ego camera to box center."""
         return float(np.hypot(self.loc_x, self.loc_z))
+
+    @property
+    def face_cy(self) -> float:
+        return 0.5 * (self.y0 + self.y1)
 
 
 def read_kitti_detection(path: Path) -> list[Detection]:
@@ -101,7 +93,6 @@ def read_kitti_detection(path: Path) -> list[Detection]:
             dets.append(
                 Detection(
                     type=fields[0],
-                    bbox=tuple(float(x) for x in fields[4:8]),  # type: ignore[arg-type]
                     dimensions=tuple(float(x) for x in fields[8:11]),  # type: ignore[arg-type]
                     location=tuple(float(x) for x in fields[11:14]),  # type: ignore[arg-type]
                     rotation_y=float(fields[14]),
@@ -203,13 +194,8 @@ def localize_rear_patch(
     det: Detection,
     p2: np.ndarray,
     convention: str,
-    size_frac: float,
-    min_size: int,
-    max_size: int | None,
-    image_w: int,
-    image_h: int,
-) -> tuple[float, float, int, float, float, float, float, float, float] | None:
-    """Return (cx, cy, size, depth, face_w, face_h, x0, y0, x1, y1) or None."""
+) -> tuple[float, float, float, float, float] | None:
+    """Return (depth, x0, y0, x1, y1) of the closest vertical face, or None."""
     corners_3d = compute_box_3d(det.dimensions, det.location, det.rotation_y, convention)
     faces = FACES_KITTI if convention == "kitti" else FACES_AWSIM
 
@@ -235,26 +221,11 @@ def localize_rear_patch(
 
     u_min, v_min = float(face_2d[0].min()), float(face_2d[1].min())
     u_max, v_max = float(face_2d[0].max()), float(face_2d[1].max())
-    face_w = u_max - u_min
-    face_h = v_max - v_min
-    if face_w < 2 or face_h < 2:
+    if (u_max - u_min) < 2 or (v_max - v_min) < 2:
         return None
 
-    cx = 0.5 * (u_min + u_max)
-    cy = 0.5 * (v_min + v_max)
-    # Square that fits inside the face AABB.
-    size = int(round(min(face_w, face_h) * size_frac))
-    size = max(min_size, size)
-    if max_size is not None:
-        size = min(size, max_size)
-
-    half = size / 2.0
-    # Keep center inside image so apply's clip still leaves a visible patch.
-    cx = float(np.clip(cx, half, image_w - half))
-    cy = float(np.clip(cy, half, image_h - half))
-
     depth = float(np.mean(face_3d[2]))
-    return cx, cy, size, depth, face_w, face_h, u_min, v_min, u_max, v_max
+    return depth, u_min, v_min, u_max, v_max
 
 
 def select_detections(
@@ -262,10 +233,10 @@ def select_detections(
     min_score: float | None,
     min_loc_z: float | None,
     only_cars: bool,
-) -> list[tuple[int, Detection]]:
+) -> list[Detection]:
     """Pre-filter by class/score/box-center depth. Closest pick happens later."""
-    indexed: list[tuple[int, Detection]] = []
-    for i, det in enumerate(dets):
+    kept: list[Detection] = []
+    for det in dets:
         if only_cars and det.type.lower() != "car":
             continue
         if min_score is not None and (det.score is None or det.score < min_score):
@@ -274,8 +245,8 @@ def select_detections(
         # can have rear-face depth ≈2 m, which is still a valid attack target.
         if min_loc_z is not None and det.location[2] < min_loc_z:
             continue
-        indexed.append((i, det))
-    return indexed
+        kept.append(det)
+    return kept
 
 
 def pick_rows(
@@ -288,8 +259,8 @@ def pick_rows(
     for r in candidates:
         if max_depth is not None and r.depth_m > max_depth:
             continue
-        # Drop ego hood / A-pillar FPs whose patch center sits too low in the image.
-        if max_center_y is not None and r.center_y > max_center_y:
+        # Drop ego hood / A-pillar FPs whose face centre sits too low in the image.
+        if max_center_y is not None and r.face_cy > max_center_y:
             continue
         kept.append(r)
     if selection == "all":
@@ -305,15 +276,8 @@ def write_csv(path: Path, rows: list[PatchRow]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "frame",
-        "center_x",
-        "center_y",
-        "size",
         "depth_m",
-        "seed",
-        "det_idx",
         "score",
-        "face_w",
-        "face_h",
         "x0",
         "y0",
         "x1",
@@ -329,15 +293,8 @@ def write_csv(path: Path, rows: list[PatchRow]) -> None:
             writer.writerow(
                 {
                     "frame": r.frame,
-                    "center_x": f"{r.center_x:.2f}",
-                    "center_y": f"{r.center_y:.2f}",
-                    "size": r.size,
                     "depth_m": f"{r.depth_m:.4f}",
-                    "seed": r.seed,
-                    "det_idx": r.det_idx,
                     "score": "" if r.score is None else f"{r.score:.6f}",
-                    "face_w": f"{r.face_w:.2f}",
-                    "face_h": f"{r.face_h:.2f}",
                     "x0": f"{r.x0:.2f}",
                     "y0": f"{r.y0:.2f}",
                     "x1": f"{r.x1:.2f}",
@@ -354,19 +311,19 @@ def main() -> int:
     p.add_argument(
         "--detections",
         type=Path,
-        default=Path("src/dsgn_offline/resource/awsim_output_offline_no_finetune"),
+        default=Path("dsgn/detections/adria/train_recordings_clean/train_frontal1"),
         help="Folder of KITTI-format detection .txt files",
     )
     p.add_argument(
         "--calib",
         type=Path,
-        default=Path("dsgn/datasets/arka/dsgn_awsim/testing_offline/calib"),
+        default=Path("dsgn/datasets/recordings/train_frontal1/calib"),
         help="Folder of KITTI calib .txt (needed to project 3D faces)",
     )
     p.add_argument(
         "--output",
         type=Path,
-        default=Path("dsgn/datasets/adria/1.patch_optimization/patches_localized.csv"),
+        default=Path("dsgn/datasets/recordings/train_frontal1/patches_localized.csv"),
         help="Output CSV path",
     )
     p.add_argument(
@@ -398,14 +355,10 @@ def main() -> int:
         "--max-center-y-frac",
         type=float,
         default=None,
-        help="optional: drop patches with center_y above this fraction of image height "
-        "(can reject truncated near cars; leave unset for closest-to-ego)",
+        help="optional: drop patches whose face centre is below this fraction of "
+        "image height (can reject ego-hood FPs; leave unset for closest-to-ego)",
     )
     p.add_argument("--all-classes", action="store_true")
-    p.add_argument("--size-frac", type=float, default=0.5, help="square side = frac * min(face_w, face_h)")
-    p.add_argument("--min-size", type=int, default=16)
-    p.add_argument("--max-size", type=int, default=400, help="cap square side (near cars can be huge)")
-    p.add_argument("--image-width", type=int, default=IMAGE_WIDTH)
     p.add_argument("--image-height", type=int, default=IMAGE_HEIGHT)
     p.add_argument("--frames", default=None, help="e.g. 100-150 or 100,150,200")
     args = p.parse_args()
@@ -438,37 +391,20 @@ def main() -> int:
             continue
 
         p2 = read_kitti_calib(calib_path)
-        candidates_det = select_detections(
-            dets, args.min_score, args.min_loc_z, only_cars
-        )
         candidates: list[PatchRow] = []
-        for det_idx, det in candidates_det:
-            loc = localize_rear_patch(
-                det,
-                p2,
-                args.box_convention,
-                args.size_frac,
-                args.min_size,
-                args.max_size,
-                args.image_width,
-                args.image_height,
-            )
+        for det in select_detections(
+            dets, args.min_score, args.min_loc_z, only_cars
+        ):
+            loc = localize_rear_patch(det, p2, args.box_convention)
             if loc is None:
                 skipped += 1
                 continue
-            cx, cy, size, depth, face_w, face_h, x0, y0, x1, y1 = loc
+            depth, x0, y0, x1, y1 = loc
             candidates.append(
                 PatchRow(
                     frame=frame,
-                    det_idx=det_idx,
-                    center_x=cx,
-                    center_y=cy,
-                    size=size,
                     depth_m=depth,
-                    seed=int(frame) * 1000 + det_idx,
                     score=det.score,
-                    face_w=face_w,
-                    face_h=face_h,
                     x0=x0,
                     y0=y0,
                     x1=x1,
@@ -495,8 +431,8 @@ def main() -> int:
     )
     if args.selection == "all":
         print(
-            "  note: apply_stereo_patches keeps the last row per frame; "
-            "use --selection closest for apply, or extend apply for multi-patch."
+            "  note: --selection all writes multiple rows per frame; "
+            "apply_face_patch.py uses one row per frame."
         )
     return 0
 

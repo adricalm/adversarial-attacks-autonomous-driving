@@ -14,9 +14,10 @@ Results are saved as a CSV beside the patch and printed to stdout.
 Usage
 -----
     python scripts/patch_optimization/eval_patch.py \\
-        --run  dsgn/datasets/adria/2.training_patch_optimization/optimize_logit_face050 \\
-        --images dsgn/datasets/adria/training_kitti_labels \\
-        --csv   dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv \\
+        --run  dsgn/datasets/adria/patch_train/face050 \\
+        --images dsgn/datasets/adria/patch_train/dataset \\
+        --csv   dsgn/datasets/adria/patch_train/train.csv \\
+        --val-csv dsgn/datasets/adria/patch_train/val.csv \\
         --cfg   dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py \\
         --loadmodel dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar
 
@@ -39,84 +40,19 @@ import torch
 
 # Reuse the geometry and model-loading code from the optimizer.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from optimize_patch import (  # noqa: E402
-    RunOpts,
-    calib_for_frame,
-    car_logits_in_radius,
+from patch_geometry import filter_visible_frames, load_face_csv
+from optimize_patch import (
+    MIN_VISIBLE_FRAC,
     compute_locations_bev,
-    count_nms_matched_cars,
-    filter_visible_frames,
     load_cfg,
-    load_csv,
     load_model,
     load_z_init,
-    prepare_stereo_pair,
-    read_image_01,
-    split_frames,
+    run_frame,
 )
 
 SCORE_THRESH = 0.33
 DEPTH_BINS = [0, 5, 10, 15, 20, 30, float("inf")]
 DEPTH_LABELS = ["<5m", "5-10m", "10-15m", "15-20m", "20-30m", ">30m"]
-
-
-def eval_frame(
-    spec,
-    patch_z: torch.Tensor,
-    model,
-    cfg,
-    locations_bev: torch.Tensor,
-    images_root: Path,
-    device: torch.device,
-    opts: RunOpts,
-) -> dict:
-    left_path = images_root / "image_2" / f"{spec.frame}.png"
-    right_path = images_root / "image_3" / f"{spec.frame}.png"
-    calib_path = images_root / "calib" / f"{spec.frame}.txt"
-
-    left = read_image_01(left_path)
-    right = read_image_01(right_path)
-    calib, calib_r, f_u, baseline = calib_for_frame(calib_path)
-
-    p = torch.sigmoid(patch_z)
-
-    with torch.no_grad():
-        img_l, img_r, image_size = prepare_stereo_pair(
-            left, right, p, spec, f_u, baseline, device,
-            shape=opts.shape, area_frac=opts.area_frac,
-            resample=opts.resample, quantize=opts.quantize,
-        )
-
-        calibs_fu = torch.tensor([float(calib.f_u)], device=device, dtype=torch.float32)
-        calibs_baseline = torch.tensor([float(baseline)], device=device, dtype=torch.float32)
-        calibs_proj = torch.tensor(
-            np.asarray(calib.P, dtype=np.float32)[None, ...], device=device
-        )
-        calibs_proj_r = torch.tensor(
-            np.asarray(calib_r.P, dtype=np.float32)[None, ...], device=device
-        )
-
-        outputs = model(img_l, img_r, calibs_fu, calibs_baseline,
-                        calibs_proj, calibs_Proj_R=calibs_proj_r)
-
-        logits_all = car_logits_in_radius(
-            outputs["bbox_cls"], locations_bev,
-            spec.loc_x, spec.loc_z, opts.match_radius,
-            num_classes=int(cfg.num_classes),
-            num_angles=int(cfg.num_angles),
-        )
-        patched_max_s = float(logits_all.sigmoid().max().item()) if logits_all.numel() else 0.0
-
-        n_nms, nms_max = count_nms_matched_cars(
-            outputs, cfg, image_size, calib.P, spec.loc_x, spec.loc_z, opts.match_radius
-        )
-
-    return dict(
-        patched_max_s=patched_max_s,
-        suppressed=int(patched_max_s < SCORE_THRESH),
-        nms_n=n_nms,
-        nms_max=nms_max,
-    )
 
 
 def depth_bin(d: float) -> int:
@@ -168,10 +104,11 @@ def main():
     ap.add_argument("--run", type=Path, required=True,
                     help="optimize_patch.py output dir (patch_best.pt lives here)")
     ap.add_argument("--images", type=Path,
-                    default=Path("dsgn/datasets/adria/training_kitti_labels"))
+                    default=Path("dsgn/datasets/adria/patch_train/dataset"))
     ap.add_argument("--csv", type=Path,
-                    default=Path("dsgn/datasets/adria/2.training_patch_optimization/patches_localized.csv"))
-    ap.add_argument("--val-csv", type=Path, default=None,
+                    default=Path("dsgn/datasets/adria/patch_train/train.csv"))
+    ap.add_argument("--val-csv", type=Path,
+                    default=Path("dsgn/datasets/adria/patch_train/val.csv"),
                     help="Explicit held-out validation CSV, matching optimize_patch.py. "
                          "When set, --csv is entirely train and no frame split is made.")
     ap.add_argument("--cfg", type=Path,
@@ -180,16 +117,8 @@ def main():
                     default=Path("dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar"))
     ap.add_argument("--patch", type=Path, default=None,
                     help="Override patch file (default: <run>/patch_best.pt)")
-    ap.add_argument("--splits", nargs="+", choices=["train", "val"], default=["val"],
-                    help="Which splits to evaluate (default: val only)")
-    ap.add_argument("--val-frac", type=float, default=0.2)
-    ap.add_argument("--split-mode", choices=["strided", "contiguous"], default="strided")
-    ap.add_argument("--shape", choices=["face", "square"], default="face")
+    ap.add_argument("--splits", nargs="+", choices=["train", "val"], default=["val"])
     ap.add_argument("--area-frac", type=float, default=0.50)
-    ap.add_argument("--resample", default="bilinear")
-    ap.add_argument("--quantize", action="store_true", default=True)
-    ap.add_argument("--match-radius", type=float, default=2.0)
-    ap.add_argument("--min-visible-frac", type=float, default=0.0)
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--patch-size", type=int, default=64)
     args = ap.parse_args()
@@ -211,51 +140,22 @@ def main():
     print(f"patch: {patch_path}  (saved epoch={resumed.epoch}, "
           f"best_val_max_s={resumed.best_val_max_s})")
 
-    opts = RunOpts(
-        loss="logit", temperature=0.2, logit_temperature=1.0, logit_clamp=None,
-        match_radius=args.match_radius, score_thresh=SCORE_THRESH, max_matches=3,
-        shape=args.shape, area_frac=args.area_frac,
-        resample=args.resample, quantize=args.quantize,
-    )
-
-    # Build the clean score lookup from CSV(s), computed at localization time.
-    all_frames = load_csv(args.csv)
-    clean_score_map = {s.frame: 0.0 for s in all_frames}
-    score_csvs = [args.csv]
-    if args.val_csv is not None:
-        score_csvs.append(args.val_csv)
-    for score_csv in score_csvs:
-        with score_csv.open() as f:
-            for row in csv.DictReader(f):
-                frame = f"{int(row['frame']):06d}"
-                clean_score_map[frame] = float(row.get("score") or 0.0)
-
-    # Reproduce either the explicit event split or the legacy frame split.
-    visible_frames, dropped = filter_visible_frames(
-        all_frames, args.images, args.shape, args.area_frac, args.min_visible_frac
+    all_frames = load_face_csv(args.csv)
+    train_frames, dropped = filter_visible_frames(
+        all_frames, args.images, args.area_frac, MIN_VISIBLE_FRAC
     )
     print(f"train CSV: dropped {len(dropped)}/{len(all_frames)} off-image frames")
 
-    if args.val_csv is not None:
-        train_frames = visible_frames
-        all_val_frames = load_csv(args.val_csv)
-        val_frames, val_dropped = filter_visible_frames(
-            all_val_frames, args.images, args.shape, args.area_frac, args.min_visible_frac
-        )
-        print(
-            f"val CSV: dropped {len(val_dropped)}/{len(all_val_frames)} off-image frames"
-        )
-        overlap = {frame.frame for frame in train_frames} & {
-            frame.frame for frame in val_frames
-        }
-        if overlap:
-            sys.exit(
-                f"train and validation CSVs overlap on {len(overlap)} frame IDs "
-                f"(e.g. {sorted(overlap)[:5]})"
-            )
-    else:
-        train_frames, val_frames = split_frames(
-            visible_frames, args.val_frac, mode=args.split_mode
+    all_val_frames = load_face_csv(args.val_csv)
+    val_frames, val_dropped = filter_visible_frames(
+        all_val_frames, args.images, args.area_frac, MIN_VISIBLE_FRAC
+    )
+    print(f"val CSV: dropped {len(val_dropped)}/{len(all_val_frames)} off-image frames")
+    overlap = {frame.frame for frame in train_frames} & {frame.frame for frame in val_frames}
+    if overlap:
+        sys.exit(
+            f"train and validation CSVs overlap on {len(overlap)} frame IDs "
+            f"(e.g. {sorted(overlap)[:5]})"
         )
 
     frames_to_eval: list = []
@@ -270,14 +170,23 @@ def main():
 
     results: list[dict] = []
     for i, (spec, split) in enumerate(frames_to_eval, 1):
-        r = eval_frame(spec, patch_z, model, cfg, locations_bev,
-                       args.images, device, opts)
-        r["frame"] = spec.frame
-        r["split"] = split
-        r["depth_m"] = spec.depth_m
-        r["ego_dist"] = getattr(spec, "ego_dist", spec.depth_m)
-        r["clean_score"] = clean_score_map.get(spec.frame, 0.0)
-        r["depth_bin"] = depth_bin(spec.depth_m)
+        with torch.no_grad():
+            out = run_frame(
+                model, cfg, locations_bev, patch_z, spec,
+                args.images, device, args.area_frac, nms=True,
+            )
+        r = dict(
+            frame=spec.frame,
+            split=split,
+            depth_m=spec.depth_m,
+            ego_dist=spec.ego_dist,
+            clean_score=spec.score,
+            depth_bin=depth_bin(spec.depth_m),
+            patched_max_s=out.max_s,
+            suppressed=int(out.max_s < SCORE_THRESH),
+            nms_n=out.n_nms,
+            nms_max=out.nms_max,
+        )
         mark = "SUPP" if r["suppressed"] else "    "
         print(f"  [{i:>3}/{len(frames_to_eval)}] {spec.frame} {split:5s} "
               f"depth={spec.depth_m:5.1f}m  "

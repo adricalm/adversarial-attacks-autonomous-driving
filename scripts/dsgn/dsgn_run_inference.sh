@@ -6,21 +6,21 @@
 # outputs (notes26/DSGN_OFFLINE_RUNBOOK.md).
 #
 # Usage:
-#   bash scripts/dsgn_run_inference.sh
-#   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn_run_inference.sh
-#   bash scripts/dsgn_run_inference.sh --debug   # optional extra args to test_no_eval.py
+#   bash scripts/dsgn/dsgn_run_inference.sh
+#   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn/dsgn_run_inference.sh
+#   bash scripts/dsgn/dsgn_run_inference.sh --debug   # optional extra args to test_no_eval.py
 #
-# Test recordings (clean GT detections, one subfolder per dataset):
+# Test recordings (clean detections, one subfolder per clip):
 #   DS=~/summer26/dsgn/datasets/recordings/test_frontal1
 #   DATA_PATH="$DS" SPLIT_FILE="$DS/frames.txt" \
-#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings TAG=test_frontal1 \
-#     bash scripts/dsgn_run_inference.sh
+#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings_clean TAG=test_frontal1 \
+#     bash scripts/dsgn/dsgn_run_inference.sh
 #
-# Patched test recordings (subfolder per patch size, then per dataset):
-#   PATCH_DS=~/summer26/dsgn/datasets/adria/6.recordings_test_3_sizes_optimization/test_frontal1_face050
+# Patched test recordings (subfolder per patch size, then per clip):
+#   PATCH_DS=~/summer26/dsgn/datasets/adria/patch_test/face050/test_frontal1
 #   DATA_PATH="$PATCH_DS" SPLIT_FILE="$DS/frames.txt" \
-#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings_3_patches/face050 TAG=test_frontal1 \
-#     bash scripts/dsgn_run_inference.sh
+#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings_patched/face050 TAG=test_frontal1 \
+#     bash scripts/dsgn/dsgn_run_inference.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -40,7 +40,7 @@ GPU="${GPU:-0}"
 BATCH="${BATCH:-1}"
 
 if [[ ! -f "${VENV}/bin/activate" ]]; then
-  echo "DSGN venv missing. Run: bash ${ROOT}/scripts/dsgn_setup_venv.sh" >&2
+  echo "DSGN venv missing. Run: bash ${ROOT}/scripts/dsgn/dsgn_setup_venv.sh" >&2
   exit 1
 fi
 

@@ -141,7 +141,7 @@ is why **the pre-existing manual recipe was never broken.** The `ROS_DISTRO` det
 trigger is baked into the Autoware image as a Docker ENV, so it is present even in a
 non-login shell and even if you never source anything.
 
-Verified-good combination for scripted launches (used by `scripts/awsim_launch.sh`):
+Verified-good combination for scripted launches (used by `scripts/awsim/awsim_launch.sh`):
 
 ```bash
 env -u ROS_DISTRO -u AMENT_PREFIX_PATH -u CYCLONEDDS_URI -u COLCON_PREFIX_PATH \
@@ -149,7 +149,7 @@ env -u ROS_DISTRO -u AMENT_PREFIX_PATH -u CYCLONEDDS_URI -u COLCON_PREFIX_PATH \
     awsim_labs.x86_64 --config <path> ...
 ```
 
-Because this is a race and not a hard guarantee, **always run `scripts/awsim_verify.sh`
+Because this is a race and not a hard guarantee, **always run `scripts/awsim/awsim_verify.sh`
 after launching** rather than assuming a successful start.
 
 Sourcing ROS 2 to *inspect* the graph from another process in the same container is
@@ -188,7 +188,7 @@ cd ~/summer26/data/awsim && md5sum -c --quiet PRISTINE_CHECKSUMS.md5
 **Footgun:** the old launch command located the binary with
 `find extracted -type f -name "*.x86_64" | head -1`. A second copy placed *inside*
 `extracted/` would be silently picked up. That is why `modded/` is a sibling, and why
-`scripts/awsim_launch.sh` uses explicit paths instead of `find`.
+`scripts/awsim/awsim_launch.sh` uses explicit paths instead of `find`.
 
 The stereo mod as shipped is **additive and confined to `modded/`**. It never rewrites
 `awsim_labs.x86_64`, `UnityPlayer.so` or `Assembly-CSharp.dll`. It only:
@@ -200,7 +200,7 @@ The stereo mod as shipped is **additive and confined to `modded/`**. It never re
 So there are three independent levels of undo:
 
 ```bash
-scripts/awsim_stereo_install.py --uninstall   # modded/ back to stock behaviour
+scripts/awsim/awsim_stereo_install.py --uninstall   # modded/ back to stock behaviour
 rm -rf data/awsim/modded && cp -a data/awsim/extracted data/awsim/modded   # fresh copy
 unzip data/awsim/awsim_labs_v1.6.1.zip        # ultimate: from the release archive
 ```
@@ -219,11 +219,11 @@ pipeline. Point the *recorder* at the stock name instead and add only `camera_ri
 
 | Script | Purpose |
 |---|---|
-| `scripts/awsim_launch.sh [pristine\|modded]` | Launch AWSIM in Docker with the correct scrubbed env |
-| `scripts/awsim_verify.sh [container]` | Check required topics, rates, and live camera geometry |
-| `scripts/awsim_stereo_build.sh` | Compile `StereoMod.dll` in a throwaway Mono container |
-| `scripts/awsim_stereo_install.py [--uninstall]` | Register/unregister the mod with Unity's loader |
-| `scripts/awsim_stereo_check.py` | Quantitative stereo validation (run inside the container) |
+| `scripts/awsim/awsim_launch.sh [pristine\|modded]` | Launch AWSIM in Docker with the correct scrubbed env |
+| `scripts/awsim/awsim_verify.sh [container]` | Check required topics, rates, and live camera geometry |
+| `scripts/awsim/awsim_stereo_build.sh` | Compile `StereoMod.dll` in a throwaway Mono container |
+| `scripts/awsim/awsim_stereo_install.py [--uninstall]` | Register/unregister the mod with Unity's loader |
+| `scripts/awsim/awsim_stereo_check.py` | Quantitative stereo validation (run inside the container) |
 
 ---
 
@@ -292,7 +292,7 @@ The mod avoids `System.Linq` entirely, for the same stripping reason that killed
 
 ### Verified result
 
-`scripts/awsim_stereo_check.py` on a live pair:
+`scripts/awsim/awsim_stereo_check.py` on a live pair:
 
 ```
 pair timestamp delta : 0.00 ms          <- same simulation frame

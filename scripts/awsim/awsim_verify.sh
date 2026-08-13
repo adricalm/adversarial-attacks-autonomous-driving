@@ -2,7 +2,7 @@
 # Verify a running AWSIM container is publishing a healthy sensor set, and print the
 # live camera geometry so it can be compared against the KITTI calib files.
 #
-# Usage: scripts/awsim_verify.sh [container_name]
+# Usage: scripts/awsim/awsim_verify.sh [container_name]
 set -uo pipefail
 
 NAME="${1:-awsim_pristine}"

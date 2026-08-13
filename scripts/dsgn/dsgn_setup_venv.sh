@@ -5,7 +5,7 @@
 # finetune_60.tar checkpoint (dozens of false cars on clean frames). For faithful
 # For Arka finetune_60, prefer precomputed dumps; official finetune_48 works on PT 2.6.
 #
-# Usage: bash ~/summer26/scripts/dsgn_setup_venv.sh
+# Usage: bash ~/summer26/scripts/dsgn/dsgn_setup_venv.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -46,4 +46,4 @@ ln -sfn "${ARKA_DS}/testing" "${DSGN}/data/awsim/testing"
 echo ""
 echo "DSGN venv ready: ${VENV}"
 echo "Activate: source ${VENV}/bin/activate"
-echo "Run inference: bash ${ROOT}/scripts/dsgn_run_inference.sh"
+echo "Run inference: bash ${ROOT}/scripts/dsgn/dsgn_run_inference.sh"

@@ -168,34 +168,35 @@ Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its R
 | Item | Path |
 | ---- | ---- |
 | Clean dataset (Arka) | `~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline/` |
-| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/testing_offline_patched/` — built by `scripts/apply_stereo_patches.py` from clean images + `patches_100_200.csv` |
+| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/testing_offline_patched/` — built by `scripts/patch_optimization/apply_face_patch.py` from clean images + localized CSV + `patch_best.png` |
 | Full offline split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt` (214 frames) |
 | Quick validation split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt` (frames 000010, 000099, 000105) |
 | Single-frame validation | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_frame10.txt` (frame 000010 only) |
 | Patch config | `~/summer26/dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv` |
-| Config | `~/summer26/external/DSGN_custom/configs/config_car_12g_awsim.py` |
-| Checkpoint | `~/summer26/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar` |
+| Config | half-res AWSIM config used by `scripts/dsgn/dsgn_run_inference.sh` (see `dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py`) |
+| Checkpoint (**supported**) | `~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar` |
+| Checkpoint (legacy) | Arka `finetune_60` — do **not** re-infer on PT 2.6; use precomputed dumps only |
 
-`scripts/dsgn_run_inference.sh` defaults to the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images.
+`scripts/dsgn/dsgn_run_inference.sh` defaults to **`finetune_48`** and the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images. Full patch pipeline: [`PATCH_OPTIMIZATION.md`](PATCH_OPTIMIZATION.md).
 
-**Inference** (`dsgn_run_inference.sh` moves KITTI txt to `dsgn/detections/adria/<tag>/`):
+**Inference** (`dsgn/dsgn_run_inference.sh` moves KITTI txt to `dsgn/detections/adria/<tag>/`):
 
 ```bash
 # Clean images, full offline split (default)
-bash ~/summer26/scripts/dsgn_run_inference.sh
+bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
 
 # Patched images (adversarial)
 DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched \
   TAG=_patched_100_135 \
-  bash ~/summer26/scripts/dsgn_run_inference.sh
+  bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
 
 # Clean images, 3-frame validation split
 SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt \
   TAG=_validate_clean \
-  bash ~/summer26/scripts/dsgn_run_inference.sh
+  bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
 ```
 
-Manual equivalent (clean default — create `data/awsim` symlinks first, or use `dsgn_run_inference.sh`):
+Manual equivalent (clean default — create `data/awsim` symlinks first, or use `dsgn/dsgn_run_inference.sh`):
 
 ```bash
 cd ~/summer26/external/DSGN_custom
@@ -204,10 +205,11 @@ python3 tools/test_no_eval.py \
   --cfg configs/config_car_12g_awsim.py \
   --data_path ~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline \
   --split_file ~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt \
-  --loadmodel ~/summer26/dsgn/checkpoints/arka/dsgn_12g_awsim_remote_downsample/finetune_60.tar \
+  --loadmodel ~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar \
   -btest 1 \
   -d 0
 ```
+
 
 Copy outputs into the mount path Autoware sees, e.g.:
 
