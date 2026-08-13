@@ -33,19 +33,16 @@ Copy the archive contents so the tree matches the table below (paths relative to
 | `awsim/` (v1.6.1 zip or `extracted/` + optional `modded/`) | `data/awsim/` | Simulator |
 | `nishishinjuku_autoware_map/` (include `.pcd` files) | `data/maps/nishishinjuku_autoware_map/` | Autoware localization |
 | `ml_models/` | `data/autoware_data/ml_models/` | Autoware perception models |
-| `dsgn/datasets/` | `dsgn/datasets/` | DSGN + patch work |
-| `dsgn/checkpoints/` (at least `kitti/dsgn_12g_b/finetune_48.tar` + config) | `dsgn/checkpoints/` | DSGN inference / patch optimize |
-| `dsgn/detections/` | `dsgn/detections/` | Patch localize / attack stats (optional if you re-infer) |
+| `dsgn/datasets/` | `dsgn/datasets/` | datasets for DSGN + patch optimization |
+| `dsgn/checkpoints/` (at least `kitti/dsgn_12g_b/finetune_48.tar` + config) | `dsgn/checkpoints/` | DSGN model |
+| `dsgn/detections/` | `dsgn/detections/` | Patch localize / attack stats (optional, nice to see) |
 
-Rough sizes on the lab machine: AWSIM ~2.5G, maps ~0.2G, ml_models ~3.6G, datasets ~18G, checkpoints ~0.1G, detections ~0.05G.
 
-You do **not** need to copy Docker containers. Pull the Autoware image when needed:
+Pull the Autoware image when needed:
 
 ```bash
 docker pull ghcr.io/autowarefoundation/autoware:universe-cuda-humble
 ```
-
-Skip copying `logs/`, AWSIM `core.*` dumps, and old disposable outputs.
 
 ### Quick presence check
 
@@ -73,15 +70,12 @@ test -f "$ROOT/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar"
 ## What to run first
 
 1. **Stack:** [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md) — Autoware + AWSIM + drive a saved route.
-2. **DSGN inference:** `scripts/dsgn/dsgn_setup_venv.sh` once, then `scripts/dsgn/dsgn_run_inference.sh`. Prefer checkpoint **`finetune_48`** (PyTorch 2.6). Treat Arka’s `finetune_60` as legacy / unreliable on this host.
+2. **DSGN inference:** `scripts/dsgn/dsgn_setup_venv.sh` once, then `scripts/dsgn/dsgn_run_inference.sh`. All experiments carried with checkpoint **`finetune_48`** (PyTorch 2.6). Treat Arka’s `finetune_60` as legacy.
 3. **Patches:** [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md).
 
-Optional later: stereo mod + recording ([`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md)), offline Autoware replay ([`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md)). Note: `dsgn_offline` currently defaults its detection folder to `resource/testing_offline_no_finetune_patched_optimized` — override the ROS parameter if you want a different dump.
+Optional for recording data only: stereo moddification + recording ([`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md)), offline Autoware replay ([`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md)). Note: `dsgn_offline` currently defaults its detection folder to `resource/testing_offline_no_finetune_patched_optimized` — override the ROS parameter if you want a different dump.
 
-## Known caveats (do not re-learn the hard way)
+## Known caveats
 
-- AWSIM must run **inside** the Autoware Docker image, not on the host.
-- Always scrub `ROS_DISTRO` / ament paths for AWSIM (the launch scripts do this).
-- Official KITTI **`finetune_48`** is the supported DSGN checkpoint here. Arka **`finetune_60`** was trained on PT 1.3 and does not re-infer faithfully on PT 2.6 / L40S — use Arka’s precomputed detection dumps if you need that baseline.
-- Joint Autoware + stereo (modded) AWSIM under heavy GPU load was not fully validated; recording with modded AWSIM alone works.
-- Ask before stopping other users’ Docker containers on the shared server.
+- Official KITTI **`finetune_48`** is the supported DSGN checkpoint here. Arka **`finetune_60`** was not reliable with this setup.
+- When ego vehicle doesn't engage, scripts such as `monitor_stop_cause.py` can be useful but at the end of the day, the majority of problems were based solely from from the server getting choked on compute (very handy to check the "frames per second (fps)" in AWSIM display).
