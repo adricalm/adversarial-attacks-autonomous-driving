@@ -117,7 +117,7 @@ def write_visuals(left, right, outdir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--outdir", default="/home/aw/logs/stereo")
+    ap.add_argument("--outdir", default="/tmp/stereo")
     ap.add_argument("--timeout", type=float, default=40.0)
     args = ap.parse_args()
 

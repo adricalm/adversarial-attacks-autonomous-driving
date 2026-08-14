@@ -34,8 +34,6 @@ data/autoware_data/diag/
 data/autoware_data/loc_src/
 data/bags/
 
-/logs/
-
 # Python
 __pycache__/
 *.pyc

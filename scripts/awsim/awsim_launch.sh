@@ -38,18 +38,17 @@ docker run --rm -d \
   -e NVIDIA_DRIVER_CAPABILITIES=all \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
   -v "$AWSIM_HOST_DIR:/home/aw/awsim" \
-  -v "$HOME/summer26/logs:/home/aw/logs:rw" \
   --entrypoint /bin/bash \
   ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
   -c "exec env -u ROS_DISTRO -u AMENT_PREFIX_PATH -u CYCLONEDDS_URI -u COLCON_PREFIX_PATH \
         ROS_DOMAIN_ID=$DOMAIN RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
         '$A/awsim_labs.x86_64' --config '$CONFIG' \
         -screen-width $WIDTH -screen-height $HEIGHT -screen-fullscreen 0 \
-        -logFile /home/aw/logs/$LOG $*"
+        -logFile /tmp/$LOG $*"
 
 echo "container : $NAME"
 echo "build     : $BUILD ($SUBDIR)"
-echo "log       : $HOME/summer26/logs/$LOG"
+echo "log       : /tmp/$LOG (inside container)"
 echo
 echo "Scene load takes ~60-75 s. Verify with:"
 echo "  scripts/awsim/awsim_verify.sh $NAME"

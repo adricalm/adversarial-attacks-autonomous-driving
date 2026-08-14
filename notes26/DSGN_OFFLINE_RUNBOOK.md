@@ -28,7 +28,7 @@ head -3 /home/aw/ros2_ws/src/dsgn_offline/resource/path.txt
 
 ## 1. Restart Autoware — **host**
 
-Use the **canonical** `docker run` from the README (mounts `src/`, `scripts/`, and `logs/` for AWSIM scratch output).
+Use the **canonical** `docker run` from the README (mounts `src/` and `scripts/`).
 
 **Why:** `dsgn_offline` must be built inside the image (needs `autoware_perception_msgs`). `src/` exposes the package; `scripts/` exposes build/run helpers.
 
@@ -37,7 +37,7 @@ Use the **canonical** `docker run` from the README (mounts `src/`, `scripts/`, a
 ## 2. Build ROS 2 overlay — **inside Docker**
 
 ```bash
-sudo docker exec -it autoware_full_test bash
+docker exec -it autoware_full_test bash
 ```
 
 ```bash

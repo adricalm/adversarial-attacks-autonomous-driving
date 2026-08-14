@@ -97,7 +97,6 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 │   └── awsim_to_kitti/                  # KITTI recorder used by record_kitti_dataset.sh
 ├── external/
 │   └── DSGN_custom/                     # DSGN train/infer (fork)
-├── logs/                                # writable scratch (AWSIM logs); gitignored — safe to wipe
 └── notes26/                             # findings and runbooks
 ```
 
@@ -161,7 +160,7 @@ export ROS_DOMAIN_ID=26
 | `data/autoware_data/autonomous_emergency_braking.param.yaml` | Sets AEB `use_pointcloud_data: false` so raw LiDAR clusters don’t trigger AEB when detection is off |
 | `launch_rviz_adaptors:=true` | Bridges RViz **2D Rough Goal Pose** clicks to `/api/routing/set_route_points` |
 
-Also mount `scripts/` → `/home/aw/scripts`, `src/` → `/home/aw/ros2_ws/src`, and `logs/` → `/home/aw/logs` (writable scratch for AWSIM launch logs).
+Also mount `scripts/` → `/home/aw/scripts` and `src/` → `/home/aw/ros2_ws/src`.
 
 **Note:** `helpers/spawn_test_npc_car.sh` injects objects via `/simulation/dummy_perception_publisher/object_info` even with CenterPoint off — separate from LiDAR detection.
 
@@ -177,7 +176,6 @@ docker run --rm -d \
   -v "$HOME/summer26/data/autoware_data/ndt_scan_matcher.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" \
   -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
   -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
-  -v "$HOME/summer26/logs:/home/aw/logs:rw" \
   -v "$HOME/summer26/data/autoware_data/perception.launch.xml.no_detection:/opt/autoware/tier4_perception_launch/share/tier4_perception_launch/launch/perception.launch.xml:ro" \
   -v "$HOME/summer26/data/autoware_data/autonomous_emergency_braking.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/control/autoware_autonomous_emergency_braking/autonomous_emergency_braking.param.yaml:ro" \
   --entrypoint /bin/bash \
