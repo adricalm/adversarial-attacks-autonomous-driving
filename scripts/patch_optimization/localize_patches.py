@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""Localize physically plausible rear-face patches from DSGN KITTI detections.
-
-For each detection, project the 3D box, pick the vertical face closest to the
-ego camera (smallest mean depth), and write that face's 2D AABB.
-
-CSV columns used by optimize_patch.py and apply_face_patch.py:
-  frame,depth_m,score,x0,y0,x1,y1,loc_x,loc_z,ego_dist
-
-Closest selection uses bird's-eye distance hypot(loc_x, loc_z), not rear-face
-depth alone — so a near lead car wins over a far neighbor.
-
-Default --selection closest emits one row per frame. Use --selection all for
-multi-det CSVs (optimizer only; apply_face_patch expects one row per frame).
-
-Examples
---------
-  # Closest car only → apply-ready CSV
-  python3 scripts/patch_optimization/localize_patches.py \\
-    --detections dsgn/detections/adria/train_recordings_clean/train_frontal1 \\
-    --calib dsgn/datasets/recordings/train_frontal1/calib \\
-    --output dsgn/datasets/recordings/train_frontal1/patches_localized.csv \\
-    --box-convention kitti --selection closest
-"""
+"""Localize rear-face patch boxes from DSGN detections → CSV for optimize/apply."""
 from __future__ import annotations
 
 import argparse
@@ -32,8 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-# Vertical faces as corner-index quadrilaterals (order matches visualize_dsgn_detections).
-# KITTI object frame: x=length, y=up(-), z=width. AWSIM: z=length, y=height, x=width.
+# Corner order matches visualize_dsgn_detections (KITTI vs AWSIM box axes differ).
 FACES_KITTI = (
     (0, 1, 5, 4),  # +X length
     (3, 2, 6, 7),  # -X length

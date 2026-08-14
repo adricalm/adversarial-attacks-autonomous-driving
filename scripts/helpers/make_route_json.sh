@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-# Build a route JSON from two captured poses (start + goal).
-#
-# Usage (inside Docker):
-#   1. Park at START, run:  bash /home/aw/scripts/helpers/capture_pose.sh --json start > /tmp/start.json
-#   2. Park at GOAL,  run:  bash /home/aw/scripts/helpers/capture_pose.sh --json goal  > /tmp/goal.json
-#   3. Combine:             bash /home/aw/scripts/helpers/make_route_json.sh /tmp/start.json /tmp/goal.json /tmp/my_route.json
-#
-# Or in one shot after moving the car twice:
-#   bash /home/aw/scripts/helpers/make_route_json.sh --interactive /tmp/my_route.json
+# Combine start + goal pose JSON into a route file.
+# Usage: make_route_json.sh start.json goal.json out.json  (or --interactive out.json)
 set -euo pipefail
 
 HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

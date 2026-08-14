@@ -1,16 +1,6 @@
 #!/usr/bin/env bash
-# Launch AWSIM Labs v1.6.1 (binary) inside the Autoware container with GUI on the
-# xrdp desktop.
-#
-# CRITICAL: AWSIM's ros2-for-unity plugin is a *standalone* build. If it detects a
-# sourced ROS 2 (via ROS_DISTRO / AMENT_PREFIX_PATH) it uses the system ROS 2 libs
-# instead of its bundled ones, and every C# publisher then fails to be created with
-# "topic name is invalid" -- no /clock, no camera, no vehicle status. Those vars are
-# baked into the Autoware image as Docker ENV, so they must be scrubbed explicitly.
-# Do NOT `source /opt/ros/humble/setup.bash` before launching AWSIM.
-#
-# Usage:
-#   scripts/awsim/awsim_launch.sh [pristine|modded] [extra awsim args...]
+# Launch AWSIM v1.6.1 in Docker (Autoware image). Usage: awsim_launch.sh [pristine|modded]
+# Unsets ROS_DISTRO etc. so ros2-for-unity publishers work — see notes26/AWSIM_STEREO_CAMERA.md.
 set -euo pipefail
 
 BUILD="${1:-pristine}"; shift || true
@@ -34,7 +24,6 @@ WIDTH="${AWSIM_WIDTH:-1280}"
 HEIGHT="${AWSIM_HEIGHT:-720}"
 LOG="awsim_${BUILD}_$(date +%Y%m%d_%H%M%S).log"
 
-# Resolved inside the container.
 A="/home/aw/awsim/$SUBDIR"
 CONFIG="${AWSIM_CONFIG:-$A/awsim_labs_Data/StreamingAssets/config.json}"
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Host script: engage autonomous mode and verify vehicle motion inside Autoware Docker.
-# Requires scripts mount: -v "$HOME/summer26/scripts:/home/aw/scripts:ro"
+# Engage Autoware and verify motion (host). Requires scripts mount in Autoware container.
 set -euo pipefail
 
 LOG_DIR="${HOME}/summer26/logs"

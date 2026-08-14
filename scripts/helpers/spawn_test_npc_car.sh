@@ -1,26 +1,6 @@
 #!/usr/bin/env bash
-# Spawn NPC car(s) for AWSIM (DummyObject / RVIZNPCSpawner).
-#
-# AWSIM destroys NPCs after ~30 s (Unity "Despawn time"); this script
-# re-spawns until Ctrl+C.
-#
-# Usage (inside Docker, AWSIM + Autoware up):
-#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh
-#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh --xy 81404.99,49954.37
-#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh \
-#     --xy 81404.99,49954.37 \
-#     --quat -0.0065,-0.0045,0.7381,0.6747
-#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh --xy A,B --xy C,D
-#   bash /home/aw/scripts/helpers/spawn_test_npc_car.sh \
-#     --xy 81761.49,50562.99 --quat ... --speed-kmh 10
-#
-# Flags:
-#   --xy X,Y          map position (repeatable). If omitted, uses legacy A+B.
-#   --quat X,Y,Z,W    orientation for the next --xy (default: legacy z=0.33,w=0.94)
-#   --speed-kmh N     target speed in km/h (default 0 = stationary). Sets
-#                     max/min velocity and initial forward twist [m/s].
-#   --respawn SEC     respawn period (default 27; must be < AWSIM despawnTime)
-#   --show false      skip spawn and exit
+# Respawn DummyObject NPC cars until Ctrl+C (AWSIM despawn ~30s).
+# Usage: spawn_test_npc_car.sh [--xy X,Y] [--quat X,Y,Z,W] [--speed-kmh N] [--respawn SEC]
 SHOW_CARS=true
 RESPAWN_SEC=27
 SPEED_KMH=0
@@ -28,8 +8,8 @@ SPEED_KMH=0
 set -euo pipefail
 
 XY_LIST=()
-QUAT_LIST=()   # parallel to XY_LIST; empty string → default quat
-PENDING_QUAT=""  # --quat before --xy
+QUAT_LIST=()
+PENDING_QUAT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,7 +20,6 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --quat)
-      # Applies to previous --xy if any, else to the next --xy.
       if [[ ${#XY_LIST[@]} -gt 0 && -z "${QUAT_LIST[-1]:-}" ]]; then
         QUAT_LIST[-1]="$2"
       else
@@ -93,7 +72,6 @@ if [[ -z "${MSG_TYPE}" ]]; then
   fi
 fi
 
-# Default orientation (legacy hardcoded cars)
 DEFAULT_QX=0.0
 DEFAULT_QY=0.0
 DEFAULT_QZ=0.33
@@ -152,7 +130,6 @@ parse_quat() {
   fi
 }
 
-# Build spawn list: either CLI --xy... or legacy A+B
 SPAWN_X=() SPAWN_Y=() SPAWN_QX=() SPAWN_QY=() SPAWN_QZ=() SPAWN_QW=()
 
 if [[ ${#XY_LIST[@]} -eq 0 ]]; then

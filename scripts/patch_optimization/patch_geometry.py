@@ -1,8 +1,4 @@
-"""Shared rear-face patch geometry for localize → optimize → apply → visualize.
-
-All of those steps must agree on: image size, how --area-frac maps a face AABB
-to a paste rectangle, and the stereo disparity used on the right image.
-"""
+"""Shared rear-face patch geometry (localize / optimize / apply / visualize)."""
 from __future__ import annotations
 
 import csv

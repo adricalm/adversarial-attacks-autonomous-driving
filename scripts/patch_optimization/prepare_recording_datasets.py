@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare recorded stereo subsets for DSGN inference.
-
-The AWSIM stereo rig is fixed, so every paired frame receives a copy of one
-known-good KITTI calibration file. A split file containing exactly the paired
-left/right frame IDs is also written in each dataset root.
-
-Velodyne data is deliberately ignored.
-"""
+"""Add calib/ and frames.txt to recorded KITTI subsets."""
 
 from __future__ import annotations
 

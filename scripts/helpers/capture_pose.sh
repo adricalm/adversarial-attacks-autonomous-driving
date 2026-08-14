@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# Print current ego pose in map frame — for building route JSON by hand.
-#
-# Usage (inside Docker, after localization is running):
-#   bash /home/aw/scripts/helpers/capture_pose.sh           # human-readable
-#   bash /home/aw/scripts/helpers/capture_pose.sh --json    # JSON fragment for route file
-#   bash /home/aw/scripts/helpers/capture_pose.sh --json start > /tmp/route.json
-#
-# Tip: park the car where you want start or goal, then run this.
+# Print ego pose for route JSON. Usage: capture_pose.sh [--json [start|goal]]
 set -euo pipefail
 set +u
 source /opt/ros/humble/setup.bash

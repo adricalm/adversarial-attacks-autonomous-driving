@@ -1,19 +1,7 @@
 #!/usr/bin/env python3
-"""Register (or unregister) StereoMod.dll with the AWSIM binary's Unity loader.
+"""Register or unregister StereoMod.dll in the AWSIM Unity loader JSON files.
 
-We cannot rebuild AWSIM from source, and BepInEx cannot load into this build (Unity
-managed-code stripping removed LINQ members that BepInEx's config system needs). Unity
-however keeps its own plain-JSON registry of managed assemblies and startup callbacks,
-so we can hook in through the engine's documented mechanism instead of injecting:
-
-  awsim_labs_Data/ScriptingAssemblies.json     - assemblies Unity loads (type 16 = user)
-  awsim_labs_Data/RuntimeInitializeOnLoads.json - static methods Unity calls at startup
-
-Only these two text files are touched. `--uninstall` restores them byte-for-byte from
-the .orig backups taken on first install, so the modded tree returns to stock.
-
-Usage:
-  scripts/awsim/awsim_stereo_install.py [--uninstall] [--game DIR]
+Usage: awsim_stereo_install.py [--uninstall] [--game DIR]
 """
 
 import argparse
@@ -25,11 +13,8 @@ from pathlib import Path
 DEFAULT_GAME = Path.home() / "summer26/data/awsim/modded/awsim_labs_v1.6.1"
 
 ASSEMBLY_DLL = "StereoMod.dll"
-USER_ASSEMBLY_TYPE = 16  # same value AWSIM's own Assembly-CSharp.dll uses
+USER_ASSEMBLY_TYPE = 16
 
-# loadTypes 0 == RuntimeInitializeLoadType.AfterSceneLoad: the engine and first scene
-# are up, so we may create GameObjects. The ego (and its camera) is spawned later, which
-# is why StereoRig polls instead of acting immediately.
 INIT_ENTRY = {
     "assemblyName": "StereoMod",
     "nameSpace": "StereoMod",

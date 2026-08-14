@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Drive route: clear → init pose (AWSIM teleport + localise) → goal → auto engage.
-# Reads start/goal from route JSON (default: route_dsgn_ab.json).
-#
-# Usage (inside Docker):
-#   bash /home/aw/scripts/drive_route_and_engage.sh
-#   bash /home/aw/scripts/drive_route_and_engage.sh /path/to/other_route.json
+# Clear route, set start/goal from JSON, engage. Usage: drive_route_and_engage.sh [route.json]
 set -eo pipefail
 set +u
 source /opt/ros/humble/setup.bash
@@ -27,7 +22,6 @@ if [[ ! -f "${ROUTE_JSON}" ]]; then
   echo "ERROR: route file not found: ${ROUTE_JSON}" >&2; exit 1
 fi
 
-# Parse positions from JSON
 read_json() { python3 -c "import json,sys; d=json.load(open('${ROUTE_JSON}')); print(d$1)"; }
 
 SX=$(read_json "['start']['position']['x']")
@@ -54,18 +48,14 @@ echo " Goal  : (${GX}, ${GY}, ${GZ})"
 echo " $(date -Iseconds)"
 echo "========================================================"
 
-
-
-# ── 1. Clear any existing route ──────────────────────────────────
 echo ""
-echo "── 1. Clear route ──"
+echo "── Clear route ──"
 ros2 service call /api/routing/clear_route \
   autoware_adapi_v1_msgs/srv/ClearRoute "{}" 2>/dev/null || true
 sleep 1
 
-# ── 2. Initial pose → teleports AWSIM car + initialises localisation ─
 echo ""
-echo "── 2. Set initial pose (teleports AWSIM + initialise localisation) ──"
+echo "── Set initial pose ──"
 ros2 topic pub --once /initialpose \
   geometry_msgs/msg/PoseWithCovarianceStamped \
   "{header: {frame_id: map}, pose: {pose: {
@@ -74,9 +64,8 @@ ros2 topic pub --once /initialpose \
 echo "  Waiting 10 s for localisation to settle..."
 sleep 10
 
-# ── 3. Set goal pose ─────────────────────────────────────────────
 echo ""
-echo "── 3. Set goal pose ──"
+echo "── Set goal pose ──"
 ros2 service call /api/routing/set_route_points \
   autoware_adapi_v1_msgs/srv/SetRoutePoints \
   "{header: {frame_id: map},
@@ -96,9 +85,8 @@ if [[ "${NO_ENGAGE}" -eq 1 ]]; then
   exit 0
 fi
 
-# ── 4. Engage autonomous mode ─────────────────────────────────────
 echo ""
-echo "── 4. Engage autonomous mode ──"
+echo "── Engage autonomous mode ──"
 ros2 service call /api/operation_mode/change_to_autonomous \
   autoware_adapi_v1_msgs/srv/ChangeOperationMode "{}"
 

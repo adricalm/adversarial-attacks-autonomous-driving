@@ -1,28 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize end-to-end patch attack stats from DSGN detection folders.
-
-Compares baseline (clean-image) detections against patched-image detections
-frame by frame. A frame counts as baseline-detected when max Car score ≥
---score-thresh; it counts as suppressed when the matching patched frame has
-max Car score below that threshold.
-
-Usage
------
-    # Default layout from test_recordings benchmark:
-    python3 scripts/patch_optimization/attack_stats.py
-
-    # Custom paths:
-    python3 scripts/patch_optimization/attack_stats.py \\
-        --baseline dsgn/detections/adria/test_recordings_clean \\
-        --patched  dsgn/detections/adria/test_recordings_patched \\
-        --patches face020 face035 face050 \\
-        --datasets test_frontal1 moving_frontal1
-
-    # Per-frame detail + summary CSV:
-    python3 scripts/patch_optimization/attack_stats.py \\
-        --per-frame-csv dsgn/datasets/adria/attack_stats_per_frame.csv \\
-        --summary-csv   dsgn/datasets/adria/attack_stats_summary.csv
-"""
+"""Compare baseline vs patched DSGN detection folders (suppression stats)."""
 from __future__ import annotations
 
 import argparse

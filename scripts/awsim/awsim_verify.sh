@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Verify a running AWSIM container is publishing a healthy sensor set, and print the
-# live camera geometry so it can be compared against the KITTI calib files.
-#
-# Usage: scripts/awsim/awsim_verify.sh [container_name]
+# Verify AWSIM topics and camera geometry. Usage: awsim_verify.sh [container_name]
 set -uo pipefail
 
 NAME="${1:-awsim_pristine}"
@@ -13,7 +10,6 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$NAME"; then
   exit 1
 fi
 
-# ROS may be sourced freely *here*: this is a separate process from the Unity plugin.
 docker exec "$NAME" bash -lc "
 source /opt/ros/humble/setup.bash
 unset CYCLONEDDS_URI

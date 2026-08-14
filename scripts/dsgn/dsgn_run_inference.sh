@@ -1,26 +1,6 @@
 #!/usr/bin/env bash
-# Run DSGN test_no_eval.py on a KITTI-layout dataset.
-#
-# WARNING: Uses PyTorch 2.6 — produces WRONG detections on Arka's finetune_60.
-# Prefer official KITTI finetune_48 (default below), or replay Arka's precomputed
-# outputs (notes26/DSGN_OFFLINE_RUNBOOK.md).
-#
-# Usage:
-#   bash scripts/dsgn/dsgn_run_inference.sh
-#   DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched TAG=_patched_100_135 bash scripts/dsgn/dsgn_run_inference.sh
-#   bash scripts/dsgn/dsgn_run_inference.sh --debug   # optional extra args to test_no_eval.py
-#
-# Test recordings (clean detections, one subfolder per clip):
-#   DS=~/summer26/dsgn/datasets/recordings/test_frontal1
-#   DATA_PATH="$DS" SPLIT_FILE="$DS/frames.txt" \
-#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings_clean TAG=test_frontal1 \
-#     bash scripts/dsgn/dsgn_run_inference.sh
-#
-# Patched test recordings (subfolder per patch size, then per clip):
-#   PATCH_DS=~/summer26/dsgn/datasets/adria/patch_test/face050/test_frontal1
-#   DATA_PATH="$PATCH_DS" SPLIT_FILE="$DS/frames.txt" \
-#     DETECTIONS_DIR=~/summer26/dsgn/detections/adria/test_recordings_patched/face050 TAG=test_frontal1 \
-#     bash scripts/dsgn/dsgn_run_inference.sh
+# Run DSGN test_no_eval.py. Default: finetune_48.
+# Usage: dsgn_run_inference.sh [extra test_no_eval.py args]
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -53,7 +33,6 @@ fi
 source "${VENV}/bin/activate"
 export PYTHONPATH="${DSGN}/tools:${PYTHONPATH:-}"
 
-# DSGN loads calib via data/awsim/training/ (hardcoded in kitti_dataset.py).
 mkdir -p "${DSGN}/data/awsim"
 ln -sfn "${DATA_PATH}" "${DSGN}/data/awsim/training"
 ln -sfn "${ARKA_DS}/trainval.txt" "${DSGN}/data/awsim/trainval.txt"
@@ -71,8 +50,7 @@ python test_no_eval.py \
   --tag "${TAG}" \
   "$@"
 
-# test_no_eval.py writes next to the checkpoint; move to dsgn/detections/adria/.
-RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}" # Arka's output, which we'll overwrite.
+RAW_OUT="$(dirname "${LOADMODEL}")/awsim_output_2${TAG}"
 OUT_DIR="${DETECTIONS_DIR}/${TAG#_}"
 if [[ -d "${RAW_OUT}" ]]; then
   mkdir -p "${DETECTIONS_DIR}"

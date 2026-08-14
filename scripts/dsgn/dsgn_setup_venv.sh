@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# DSGN inference environment (PyTorch 2.6 + CUDA 12.4).
-#
-# Usage: bash ~/summer26/scripts/dsgn/dsgn_setup_venv.sh
+# Create DSGN venv (PT 2.6 + cu124). Usage: dsgn_setup_venv.sh
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -19,7 +17,6 @@ python3 -m venv "${VENV}"
 source "${VENV}/bin/activate"
 
 pip install --upgrade pip wheel setuptools
-# CUDA 12.4 wheels; matches nvcc 12.4 on this host.
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 
 pip install \
@@ -32,7 +29,6 @@ pip install -e . --no-build-isolation
 cd "${DSGN}/dsgn/utils/rotate_iou"
 bash compile.sh
 
-# Calib loader reads data/awsim/training/ (see kitti_dataset.py).
 mkdir -p "${DSGN}/data/awsim"
 ln -sfn "${ARKA_DS}/testing_offline" "${DSGN}/data/awsim/training"
 ln -sfn "${ARKA_DS}/trainval.txt" "${DSGN}/data/awsim/trainval.txt"

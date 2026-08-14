@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-# Fine-tune DSGN on AWSIM stereo data (PyTorch 2.6).
-#
-#
-# Usage:
-#   bash scripts/dsgn/dsgn_train.sh
-#   DEBUG=1 EPOCHS=1 bash scripts/dsgn/dsgn_train.sh   # smoke test
-#   FORCE_TARGETS=1 bash scripts/dsgn/dsgn_train.sh      # re-run generate_targets
+# Fine-tune DSGN on AWSIM data. Usage: dsgn_train.sh  (DEBUG=1 EPOCHS=1 for smoke test)
 set -euo pipefail
 
 ROOT="${HOME}/summer26"
@@ -16,7 +10,6 @@ ADRIA_TRAIN="${ROOT}/dsgn/datasets/adria/training_kitti_labels"
 KITTI_CKPT="${ROOT}/dsgn/checkpoints/kitti/dsgn_12g_b"
 ADRIA_CKPT="${ROOT}/dsgn/checkpoints/adria/dsgn_12g_awsim"
 
-# Arka training/ was removed to free disk; train only from adria KITTI-converted labels.
 DATA_PATH="${DATA_PATH:-${ADRIA_TRAIN}}"
 SPLIT_FILE="${SPLIT_FILE:-${ARKA_DS}/trainval.txt}"
 CFG="${CFG:-${DSGN}/configs/config_car_12g_awsim.py}"
@@ -42,7 +35,6 @@ fi
 source "${VENV}/bin/activate"
 export PYTHONPATH="${DSGN}/tools:${PYTHONPATH:-}"
 
-# Labels/calib are read via data/awsim/training/ (hardcoded in kitti_dataset.py).
 mkdir -p "${DSGN}/data/awsim"
 ln -sfn "${DATA_PATH}" "${DSGN}/data/awsim/training"
 ln -sfn "${ARKA_DS}/trainval.txt" "${DSGN}/data/awsim/trainval.txt"

@@ -1,30 +1,5 @@
 #!/usr/bin/env python3
-"""Apply a universal adversarial patch to a KITTI-layout stereo dataset
-using the same rear-face geometry as optimize_patch.py (--area-frac N).
-
-For each frame that has an entry in the localized CSV, the script:
-  - Computes the patch rectangle from the rear-face AABB at the chosen area fraction
-  - Pastes the patch PNG on left image_2 and (disparity-shifted) right image_3
-  - Copies frames without a CSV entry unchanged
-  - Copies calib/ from source
-
-Usage
------
-    # 1. Localize patches on the test detections (if not done yet):
-    python scripts/patch_optimization/localize_patches.py \\
-        --detections dsgn/detections/adria/test_recordings_clean/test_frontal1 \\
-        --calib dsgn/datasets/recordings/test_frontal1/calib \\
-        --output dsgn/datasets/recordings/test_frontal1/patches_localized.csv \\
-        --box-convention kitti --selection closest
-
-    # 2. Apply the optimized patch:
-    python scripts/patch_optimization/apply_face_patch.py \\
-        --source  dsgn/datasets/recordings/test_frontal1 \\
-        --csv     dsgn/datasets/recordings/test_frontal1/patches_localized.csv \\
-        --patch   dsgn/datasets/adria/patch_train/face050/patch_best.png \\
-        --out     dsgn/datasets/adria/patch_test/face050/test_frontal1 \\
-        --area-frac 0.50
-"""
+"""Apply an optimized patch to a KITTI-layout stereo dataset. See notes26/PATCH_OPTIMIZATION.md."""
 from __future__ import annotations
 
 import argparse

@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Run dsgn_offline node — inside autoware_full_test container, after build.
-#
-# Optional env:
-#   DETECTION_FOLDER  override precomputed .txt directory (e.g. adversarial outputs)
-#   PATH_FILE         override ego trajectory file (default: resource/path.txt)
+# Run dsgn_offline node (after build). Env: DETECTION_FOLDER, PATH_FILE.
 set -euo pipefail
 
 source /opt/ros/humble/setup.bash

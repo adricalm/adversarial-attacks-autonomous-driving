@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Optimize a shared adversarial patch against DSGN (closest-car logit LSE evasion).
-
-Loads clean stereo images and pastes the current shared patch in-graph each step.
-Requires separate train/val CSVs (e.g. from build_combined_dataset.py).
-
-Example
--------
-  external/DSGN_custom/.venv/bin/python scripts/patch_optimization/optimize_patch.py \\
-    --images dsgn/datasets/adria/patch_train/dataset \\
-    --csv dsgn/datasets/adria/patch_train/train.csv \\
-    --val-csv dsgn/datasets/adria/patch_train/val.csv \\
-    --out dsgn/datasets/adria/patch_train/face050 \\
-    --area-frac 0.50 --epochs 20
-"""
+"""Optimize a shared adversarial patch vs DSGN (closest-car logit evasion). See notes26/PATCH_OPTIMIZATION.md."""
 from __future__ import annotations
 
 import argparse

@@ -144,10 +144,7 @@ def draw_projected_box3d(img, qs, color=(0, 255, 0), thickness=2):
     return img
 
 
-# DSGN AWSIM loader downsamples 1920×1080 → 960×540; model-written 2D bboxes
-# are often in that half-res space. Full-res training label_2 / some offline
-# dumps need --full-res-bbox.
-INFER_HW = (540, 960)  # (H, W) matching KITTILoader_* downscale_factor=0.5
+INFER_HW = (540, 960)  # half-res DSGN inference; use --full-res-bbox for full-res labels
 
 
 def annotate_frame(

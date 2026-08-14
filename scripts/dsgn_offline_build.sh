@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Build dsgn_offline ROS 2 overlay — run inside autoware_full_test container.
-#
-# Prerequisite: host mount
-#   -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro"
+# Build dsgn_offline inside autoware_full_test (needs src/ mount).
 set -euo pipefail
 
 source /opt/ros/humble/setup.bash

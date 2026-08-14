@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Merge DSGN detection outputs: baseline for most frames, new inference only on patched range.
-
-Use this when full re-inference was run with a newer PyTorch than Arka's training
-environment — unpatched frames will have spurious extra detections if you take the
-new folder wholesale.
-
-Example:
-  python3 scripts/dsgn/merge_dsgn_outputs.py \\
-    --baseline src/dsgn_offline/resource/awsim_output_offline \\
-    --patched  dsgn/detections/adria/patched_100_135 \\
-    --output   src/dsgn_offline/resource/awsim_output_patched_merged \\
-    --frames   100-135
-"""
+"""Merge baseline detections with a patched frame range (legacy PT mismatch workaround)."""
 from __future__ import annotations
 
 import argparse

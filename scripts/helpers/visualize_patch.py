@@ -1,16 +1,4 @@
-"""Visualize the current best patch pasted on real training/val images.
-
-Usage:
-    python scripts/helpers/visualize_patch.py \
-        --run  dsgn/datasets/adria/patch_train/face050 \
-        --images dsgn/datasets/adria/patch_train/dataset \
-        --csv   dsgn/datasets/adria/patch_train/train.csv \
-        --out   /tmp/patch_vis
-
-Picks a spread of frames across depth bins, renders the patch on left+right,
-draws the face bounding box in red and the pasted patch rect in green.
-Saves one PNG per frame + a compact contact-sheet montage.
-"""
+"""Visualize optimized patch on sample train/val frames."""
 
 from __future__ import annotations
 

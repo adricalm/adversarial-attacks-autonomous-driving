@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-# Compile StereoMod.dll against the AWSIM binary's own managed assemblies.
-#
-# Compiled in a throwaway Mono container so nothing is installed on this shared host.
-# -nostdlib/-noconfig + referencing the game's own mscorlib guarantees the output binds
-# to exactly the runtime AWSIM ships, rather than whatever the compiler defaults to.
-#
-# Output: data/awsim/modded/awsim_labs_v1.6.1/awsim_labs_Data/Managed/StereoMod.dll
+# Build StereoMod.dll in a Mono container. Output: data/awsim/modded/.../Managed/StereoMod.dll
 set -euo pipefail
 
 SRC_DIR="$HOME/summer26/src/awsim_stereo_mod"

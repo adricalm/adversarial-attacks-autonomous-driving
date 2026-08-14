@@ -1,20 +1,6 @@
 #!/usr/bin/env bash
-# Record a KITTI-layout stereo dataset from modded AWSIM + Autoware.
-#
-# Runs the recorder in its OWN short-lived container rather than inside
-# autoware_full_test. That container has no dataset mount, and restarting it to
-# add one would take down a working Autoware stack for no good reason. A
-# separate container on the same host network / ROS_DOMAIN_ID sees the same ROS
-# graph and keeps the recorder's CPU load off the stack.
-#
-# Output goes to dsgn/datasets/<run_id>/ (already gitignored) in the layout
-# optimize_patch.py expects: image_2/, image_3/, velodyne/, pose/path.txt.
-# calib/ is added afterwards via prepare_recording_datasets.py (fixed rig copy).
-#
-# Usage:
-#   scripts/record_kitti_dataset.sh adria/awsim_stereo_001
-#   scripts/record_kitti_dataset.sh adria/smoke --max-frames 20
-#   scripts/record_kitti_dataset.sh adria/train_only --no-velodyne
+# Record KITTI-layout stereo from modded AWSIM. Usage: record_kitti_dataset.sh <run_id> [--max-frames N]
+# Uses a separate short-lived container on the same ROS domain (does not restart Autoware).
 set -euo pipefail
 
 RUN_ID="${1:-run_$(date +%Y%m%d_%H%M%S)}"; shift || true
@@ -50,8 +36,6 @@ echo
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
-# Interactive only when there is a terminal, so the script also works from a
-# pipeline or a non-tty agent shell.
 TTY_FLAGS=()
 [[ -t 0 ]] && TTY_FLAGS=(-it)
 
@@ -69,10 +53,6 @@ exec docker run --rm "${TTY_FLAGS[@]}" \
   "$IMAGE" \
   -lc "source /opt/ros/humble/setup.bash
        source /opt/autoware/setup.bash
-       # Use the same DDS config as the stack: lo-only and a 10 MB socket
-       # receive buffer. Running on CycloneDDS defaults (2 MB) makes the
-       # recorder's image/lidar traffic overflow buffers domain-wide and
-       # stalls Autoware. Needs net.core.rmem_max >= 10 MB.
        export CYCLONEDDS_URI=file:///dds/cyclonedds.xml
        export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
        export ROS_DOMAIN_ID=$DOMAIN

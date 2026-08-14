@@ -1,44 +1,5 @@
 #!/usr/bin/env python3
-"""Log why the ego stops, at 5 Hz, for correlating with recorder start/stop.
-
-Run inside the Autoware container while driving, then start the recorder in
-another terminal. Every line is wall-clock stamped so the moment the recorder
-attaches lines up with whichever signal changes.
-
-    python3 /home/aw/scripts/helpers/monitor_stop_cause.py
-    python3 /home/aw/scripts/helpers/monitor_stop_cause.py --log /home/aw/logs/stop.log
-
-Columns:
-  vel      measured longitudinal velocity (m/s)
-  cmd_v    commanded velocity from the controller (m/s)
-  cmd_a    commanded acceleration (m/s^2)
-  traj0    velocity of first planning trajectory point (m/s)
-  mode     operation mode (2 = AUTONOMOUS)
-  mrm      MRM state / behavior (1/1 = NORMAL / NONE)
-  aeb      number of AEB metrics reported (non-zero => AEB active)
-  avail    operation_mode/availability: autonomous flag (stop/local/remote/
-           emergency_stop/comfortable_stop/pull_over logged alongside it)
-  ages     seconds since each topic was last received; a stalled feed shows here
-
-Two diagnostic sources are logged, and they are NOT the same thing:
-
-  DIAG-*   raw /diagnostics. Each publishing node emits ONLY ITS OWN status
-           in each message (there is no single "everything" snapshot on this
-           topic), so this is transition-tracked per diagnostic *name*
-           across messages, not per message. Useful for eyeballing which
-           node is complaining, noisy by nature (a node's checks can flap
-           independently of anything downstream).
-
-  GRAPH-*  /diagnostics_graph/{struct,status}, i.e. diagnostic_graph_aggregator
-           -- the actual tree that feeds /system/command_mode/availability
-           (and therefore /system/operation_mode/availability + mrm_handler).
-           This is the authoritative "why did autonomous become unavailable"
-           source. Each graph node reports level (current), input_level (raw
-           upstream level before latching) and latch_level. When latch_level
-           stays nonzero after input_level has gone back to 0, the condition
-           has RECOVERED but the graph is still latched -- that alone
-           explains a permanent stop that outlives whatever tripped it.
-"""
+"""Log ego stop causes at 5 Hz while driving (run inside Autoware container)."""
 from __future__ import annotations
 
 import argparse

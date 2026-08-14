@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Quantitatively verify the AWSIM stereo pair. Runs INSIDE the Autoware container.
-
-Publishing two topics proves nothing about geometry. This checks the three properties
-that actually make a pair usable for stereo 3D detection:
-
-  1. The views differ (a cloned camera left at the same pose would publish twice).
-  2. They are RECTIFIED: matched features lie on the same image row, so median |dy| ~ 0.
-     If this fails, disparity is meaningless and DSGN will not train.
-  3. Disparity is positive and its implied depth d = fx*B/Z is physically sane, which
-     confirms the 0.54 m baseline and the left/right ordering (a swapped pair gives
-     negative disparity).
-
-Usage (inside container):  python3 awsim_stereo_check.py --outdir /home/aw/logs/stereo
-"""
+"""Check AWSIM stereo pair geometry (run inside Docker). Usage: awsim_stereo_check.py --outdir DIR"""
 
 import argparse
 import sys

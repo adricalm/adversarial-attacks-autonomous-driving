@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Build one collision-free KITTI view for patch optimization.
-
-`optimize_patch.py` accepts one image root and frame IDs from CSV files. This
-utility combines several clean datasets by assigning new contiguous frame IDs,
-linking their stereo/calibration files, and rewriting train/validation CSVs.
-
-Example:
-    python scripts/patch_optimization/build_combined_dataset.py \
-      --out dsgn/datasets/adria/patch_train \
-      --train-source train_frontal1 dsgn/datasets/recordings/train_frontal1 \
-        dsgn/datasets/recordings/train_frontal1/patches_localized.csv \
-      --val-source train_frontal5 dsgn/datasets/recordings/train_frontal5 \
-        dsgn/datasets/recordings/train_frontal5/patches_localized.csv
-"""
+"""Merge recordings into one patch_train view (images + train/val CSVs)."""
 
 from __future__ import annotations
 

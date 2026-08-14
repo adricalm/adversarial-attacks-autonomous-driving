@@ -1,32 +1,4 @@
-"""Offline evaluation of a universal adversarial patch against DSGN.
-
-Runs the best patch (or any supplied .pt/.png) through every val frame
-(and optionally every train frame) with the same geometry used during
-optimize_patch.py. Reports:
-
-  - Per-frame: split, depth, clean_score (from CSV), patched_max_s,
-    suppressed (patched < score_thresh), post-NMS det count.
-  - Summary table by depth bin.
-  - Suppression rate: val, train, overall.
-
-Results are saved as a CSV beside the patch and printed to stdout.
-
-Usage
------
-    python scripts/patch_optimization/eval_patch.py \\
-        --run  dsgn/datasets/adria/patch_train/face050 \\
-        --images dsgn/datasets/adria/patch_train/dataset \\
-        --csv   dsgn/datasets/adria/patch_train/train.csv \\
-        --val-csv dsgn/datasets/adria/patch_train/val.csv \\
-        --cfg   dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py \\
-        --loadmodel dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar
-
-    # Evaluate a specific checkpoint instead of patch_best:
-        --patch dsgn/.../patch_best_epoch010.pt
-
-    # Include training frames (check for overfitting):
-        --splits train val
-"""
+"""Offline patch evaluation vs DSGN. See notes26/PATCH_OPTIMIZATION.md."""
 
 from __future__ import annotations
 
@@ -38,7 +10,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-# Reuse the geometry and model-loading code from the optimizer.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from patch_geometry import filter_visible_frames, load_face_csv
 from optimize_patch import (

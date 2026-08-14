@@ -1,32 +1,5 @@
 #!/usr/bin/env python3
-"""Convert AWSIM label_2 files to KITTI convention for DSGN finetuning.
-
-AWSIM (Arka plotter / training label_2):
-  fields 8,9,10 = length, height, width
-  y = box center
-  ry = 0 means length along camera Z
-
-KITTI (Object3d / finetune_48 / DSGN training):
-  fields 8,9,10 = height, width, length
-  y = bottom-center
-  ry = 0 means length along camera X
-
-Validated remap (see label_convention_probe):
-  h,w,l = f9, f10, f8
-  y     = y_awsim + h/2
-  ry    = wrap(ry_awsim - pi/2)
-  alpha = wrap(ry - atan2(x, z))
-
-Usage (host):
-  python scripts/dsgn/dsgn_transform_label.py
-  python scripts/dsgn/dsgn_transform_label.py \\
-    --labels_path <awsim_format_label_2_dir> \\
-    --save_path  ~/summer26/dsgn/datasets/adria/training_kitti_labels/label_2
-
-Note (Jul 2026): Arka's training/ tree was removed from this host to free space.
-  Defaults below may not exist anymore; pass --labels_path if you still have a source.
-  Training DATA_PATH is always adria/training_kitti_labels (see notes26/DSGN_AWSIM_FINDINGS.md).
-"""
+"""Convert AWSIM label_2 to KITTI convention for DSGN training."""
 from __future__ import annotations
 
 import argparse
