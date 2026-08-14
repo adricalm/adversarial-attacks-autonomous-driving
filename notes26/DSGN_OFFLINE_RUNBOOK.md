@@ -34,13 +34,6 @@ docker exec -it autoware_full_test bash
 ```
 
 ```bash
-bash /home/aw/scripts/dsgn_offline_build.sh
-source /home/aw/ros2_ws/install/setup.bash
-```
-
-Manual equivalent:
-
-```bash
 source /opt/ros/humble/setup.bash
 source /opt/autoware/setup.bash
 unset CYCLONEDDS_URI

@@ -11,7 +11,7 @@ WS=/home/aw/ros2_ws
 RESOURCE="${WS}/src/dsgn_offline/resource"
 
 if [[ ! -f "${WS}/install/setup.bash" ]]; then
-  echo "ERROR: overlay not built. Run dsgn_offline_build.sh first."
+  echo "ERROR: overlay not built. Run colcon build --packages-select dsgn_offline in /home/aw/ros2_ws first."
   exit 1
 fi
 # shellcheck source=/dev/null

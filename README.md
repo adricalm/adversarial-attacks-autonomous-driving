@@ -90,7 +90,7 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 │   ├── dsgn/                            # setup, train, inference, label tools (host)
 │   ├── patch_optimization/              # localize → optimize → apply → eval
 │   ├── helpers/                         # optional viz, pose capture, NPC spawn, …
-│   └── drive_route_and_engage.sh, engage_*.sh, dsgn_offline_*.sh, record_kitti_dataset.sh
+│   └── drive_route_and_engage.sh, engage_*.sh, dsgn_offline_run.sh, record_kitti_dataset.sh
 ├── src/                                 # separate git repos or small integration code
 │   ├── dsgn_offline/                    # ROS 2 offline detection publisher (fork)
 │   ├── awsim_stereo_mod/                # StereoMod C# source (built → modded AWSIM)
@@ -226,8 +226,13 @@ Replay precomputed KITTI-format detections into Autoware (folder of `.txt` + `pa
 The canonical `docker run` already mounts `src/` and `scripts/`. Build and run inside the container:
 
 ```bash
-bash /home/aw/scripts/dsgn_offline_build.sh
-source /home/aw/ros2_ws/install/setup.bash
+source /opt/ros/humble/setup.bash
+source /opt/autoware/setup.bash
+unset CYCLONEDDS_URI
+export ROS_DOMAIN_ID=26
+cd /home/aw/ros2_ws
+colcon build --symlink-install --packages-select dsgn_offline
+source install/setup.bash
 bash /home/aw/scripts/dsgn_offline_run.sh
 ```
 
@@ -380,7 +385,6 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 | `drive_route_and_engage.sh` | Clear → init pose → goal → engage |
 | `engage_autoware.sh` | **Host:** engage + motion check |
 | `record_kitti_dataset.sh` | **Host:** record KITTI-layout stereo from modded AWSIM |
-| `dsgn_offline_build.sh` | **Inside Docker:** colcon build `dsgn_offline` |
 | `dsgn_offline_run.sh` | **Inside Docker:** publish offline detections |
 
 ### DSGN (`scripts/dsgn/`; host)
