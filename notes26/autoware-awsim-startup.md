@@ -155,7 +155,6 @@ docker exec -it "$AUTOWARE_CONTAINER" bash
 Then, inside that container:
 
 ```bash
-bash /home/aw/autoware_data/verify_stack_ready.sh
 bash /home/aw/scripts/drive_route_and_engage.sh \
   /home/aw/autoware_data/route_dsgn_ab.json
 ```
