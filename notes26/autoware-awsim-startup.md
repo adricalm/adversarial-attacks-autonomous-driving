@@ -44,7 +44,7 @@ They are not arbitrary, but they fall into two categories:
 Start Autoware detached:
 
 ```bash
-docker run --rm -d \
+sudo docker run --rm -d \
   --name "$AUTOWARE_CONTAINER" \
   --device nvidia.com/gpu=all \
   --network host \
