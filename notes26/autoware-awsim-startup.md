@@ -113,15 +113,6 @@ sudo docker run --rm -it \
 
 **Build choice:** use `modded/` for the stereo build (default above). For the pristine baseline, switch to `./extracted/awsim_labs_v1.6.1/awsim_labs.x86_64`.
 
-In the AWSIM window, pick map / ego / position and click **Load**. Do **not** source `/opt/ros/...` before launching AWSIM.
-
-After the scene loads, confirm ROS topics in a second terminal (optional but recommended):
-
-```bash
-export ROS_DOMAIN_ID=26
-bash ~/summer26/scripts/awsim/awsim_verify.sh awsim_gui_test
-```
-
 A normal-looking GUI without `/clock`, camera, and LiDAR topics is a failed launch. See [`AWSIM_STEREO_CAMERA.md`](AWSIM_STEREO_CAMERA.md) for the `ROS_DISTRO` race if that happens.
 
 **Alternative:** `scripts/awsim/awsim_launch.sh [pristine|modded]` auto-loads via `--config` (detached container, no GUI clicking). The command above is the usual interactive workflow.
@@ -153,8 +144,6 @@ sudo docker run --rm -it \
   '
 ```
 
-Autoware is launched with `launch_rviz_adaptors:=true`, so RViz's **2D Rough Goal Pose** tool can set a route via `/api/routing/set_route_points`.
-
 ### Initialize, route, and drive
 
 After AWSIM verification succeeds, open a shell in Autoware:
@@ -176,4 +165,4 @@ The drive helper clears the old route, publishes the route's initial pose (which
 ### Optional layers, added only after baseline motion works
 
 - **`dsgn_offline`:** build/replay only after the vehicle completes the baseline route. Follow [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md); the `src` and `scripts` mounts above are already present.
-- **Stereo/data recording/patch experiments:** use the modded AWSIM build and the dedicated scripts/runbooks. They are research layers, not startup prerequisites.
+- **Stereo/data recording/patch experiments:** use the modded AWSIM build and the dedicated scripts/runbooks.
