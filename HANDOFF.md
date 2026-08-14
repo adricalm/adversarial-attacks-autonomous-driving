@@ -24,19 +24,20 @@ Both nested repos should have `origin` pointing at the adricalm URLs above and `
 
 ## Data link (not in git)
 
-**Shared drive / folder:** _TODO: drive link to data here_
+**Shared drive / folder:** _TODO: drive link to non git assets here_
 
 Copy the archive contents so the tree matches the table below (paths relative to `~/summer26`).
 
 | Bundle / top-level folder | Put it here | Needed for |
 |---------------------------|-------------|------------|
 | `awsim/` (v1.6.1 zip or `extracted/` + optional `modded/`) | `data/awsim/` | Simulator |
-| `nishishinjuku_autoware_map/` (include `.pcd` files) | `data/maps/nishishinjuku_autoware_map/` | Autoware localization |
+| `pointcloud_map.pcd` | `data/maps/nishishinjuku_autoware_map/` | Autoware localization |
 | `ml_models/` | `data/autoware_data/ml_models/` | Autoware perception models |
 | `dsgn/datasets/` | `dsgn/datasets/` | datasets for DSGN + patch optimization |
 | `dsgn/checkpoints/` (at least `kitti/dsgn_12g_b/finetune_48.tar` + config) | `dsgn/checkpoints/` | DSGN model |
 | `dsgn/detections/` | `dsgn/detections/` | Patch localize / attack stats (optional, nice to see) |
 
+The rest of the map (YAML, OSM) is already in the central repo.
 
 Pull the Autoware image when needed:
 
@@ -49,6 +50,7 @@ docker pull ghcr.io/autowarefoundation/autoware:universe-cuda-humble
 ```bash
 export ROOT="${ROOT:-$HOME/summer26}"
 test -d "$ROOT/data/maps/nishishinjuku_autoware_map"
+test -f "$ROOT/data/maps/nishishinjuku_autoware_map/pointcloud_map.pcd"
 test -d "$ROOT/data/autoware_data/ml_models"
 test -x "$ROOT/data/awsim/extracted/awsim_labs_v1.6.1/awsim_labs.x86_64"
 test -d "$ROOT/external/DSGN_custom"
