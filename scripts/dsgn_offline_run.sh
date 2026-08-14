@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Run dsgn_offline node (after build). Env: DETECTION_FOLDER, PATH_FILE.
-set -euo pipefail
-
+set -eo pipefail
+set +u
 source /opt/ros/humble/setup.bash
 source /opt/autoware/setup.bash
+set -u
 unset CYCLONEDDS_URI
 export ROS_DOMAIN_ID=26
 
@@ -14,8 +15,10 @@ if [[ ! -f "${WS}/install/setup.bash" ]]; then
   echo "ERROR: overlay not built. Run colcon build --packages-select dsgn_offline in /home/aw/ros2_ws first."
   exit 1
 fi
+set +u
 # shellcheck source=/dev/null
 source "${WS}/install/setup.bash"
+set -u
 
 DETECTION_FOLDER="${DETECTION_FOLDER:-${RESOURCE}/awsim_output_offline}"
 PATH_FILE="${PATH_FILE:-${RESOURCE}/path.txt}"

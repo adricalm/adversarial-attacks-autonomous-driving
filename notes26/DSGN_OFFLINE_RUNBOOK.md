@@ -50,7 +50,6 @@ source install/setup.bash
 Stack must be up with localization + route. If AWSIM was restarted, re-init the route:
 
 ```bash
-bash /home/aw/autoware_data/verify_stack_ready.sh
 bash /home/aw/scripts/drive_route_and_engage.sh \
   /home/aw/autoware_data/route_dsgn_ab.json
 ```
