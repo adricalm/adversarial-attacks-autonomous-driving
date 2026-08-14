@@ -11,12 +11,12 @@ See also: [README DSGN overlay section](../README.md#dsgn-offline-overlay-option
 
 Before building or running `dsgn_offline`:
 
-- [x] Autoware container running (`autoware_full_test`) with **canonical launch** from README (includes `src/` + `scripts/` mounts, NDT bind-mount, `launch_rviz_adaptors:=true`)
-- [x] AWSIM running, `/clock` has one publisher
+- [ ] Autoware container running (`autoware_full_test`) with **canonical launch** from README (includes `src/` + `scripts/` mounts, NDT bind-mount, `launch_rviz_adaptors:=true`)
+- [ ] AWSIM running
 - [ ] Localization initialized and route set (`bash /home/aw/scripts/drive_route_and_engage.sh`)
 - [ ] Ego driving or ready to engage (`/autoware/state` → 5)
 
-**Synchronization note:** `dsgn_offline` picks the nearest row in `path.txt` from current `/localization/pose_with_covariance`. Detections align only when ego `(x, y)` is close to Arka's recorded MGRS trajectory (~81377, 49917). Compare while driving:
+**Synchronization note:** `dsgn_offline` picks the nearest row in `path.txt` from current `/localization/pose_with_covariance`. 
 
 ```bash
 # inside Docker
