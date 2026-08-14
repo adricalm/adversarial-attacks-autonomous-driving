@@ -87,52 +87,17 @@ ros2 topic echo /perception/object_recognition/detection/objects --once
 ros2 topic hz /perception/object_recognition/tracking/objects
 ros2 topic echo /perception/object_recognition/tracking/objects --once
 ```
-
-
-| Symptom                           | Likely cause                                                           |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| No detection messages             | Ego pose not initialized; wrong `path_file`; no matching `NNNNNN.txt`  |
-| Detection empty `objects: []`     | Frame index points to empty file (many early indices are empty)        |
-| Detection OK, tracking empty      | Wrong `frame_id`, stale `stamp`, low `existence_probability`, or class |
-| Two publishers on detection topic | Default LiDAR detector still running; may need launch tweak later     |
-
-
+A straigtfoward approach is to just visualize the bounding boxes in Rviz (make sure to check the Perception -> Object Recognition -> Detection in Display.
 **Known node quirks** (in `dsgn_offline.py`):
 
 - Yaw hardcoded to `0`
 - Close objects get `+5.0` m on `x` in base_link
 - All objects classified as Car (`label=1`)
 
----
-
-## 4. Confirm planner reaction (**inside Docker** + RViz)
-
-RViz: enable perception object displays; check markers near ego.
-
-```bash
-ros2 topic echo /planning/scenario_planning/trajectory --once
-ros2 topic echo /vehicle/status/velocity_status --once
-bash /home/aw/autoware_data/diagnose_stuck.sh
-```
-
-Stop the node (Ctrl+C) and confirm behavior returns toward baseline when objects disappear.
 
 ---
 
-## 5. Output-space attack (no ML) (**host** + **inside Docker**)
-
-Copy clean outputs before editing:
-
-```bash
-cp -r ~/summer26/src/dsgn_offline/resource/awsim_output_offline \
-      ~/summer26/src/dsgn_offline/resource/awsim_output_attack_ghost
-```
-
-Edit KITTI-format lines in selected `NNNNNN.txt` files under `awsim_output_attack_ghost/`:
-
-- **Suppress:** delete all lines in a frame file
-- **Closer:** reduce depth field (column 14, `z` in camera frame)
-- **Ghost:** copy a line from a frame with a car and paste into an empty frame on the ego path
+## 5. Test attacked frames
 
 Relaunch with alternate folder:
 
@@ -140,91 +105,6 @@ Relaunch with alternate folder:
 DETECTION_FOLDER=/home/aw/ros2_ws/src/dsgn_offline/resource/awsim_output_attack_ghost \
   bash /home/aw/scripts/dsgn_offline_run.sh
 ```
-
----
-
-## 6. Image-space patch attack (later) (**host**, GPU / PyTorch)
-
-Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its README for `setup.py` + CUDA deps).
-
-**Paths on this machine:**
-
-
-| Item | Path |
-| ---- | ---- |
-| Clean dataset (Arka) | `~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline/` |
-| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/testing_offline_patched/` (built by `scripts/patch_optimization/apply_face_patch.py` from clean images + localized CSV + `patch_best.png`) |
-| Full offline split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt` (214 frames) |
-| Quick validation split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt` (frames 000010, 000099, 000105) |
-| Single-frame validation | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_frame10.txt` (frame 000010 only) |
-| Patch config | `~/summer26/dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv` |
-| Config | half-res AWSIM config used by `scripts/dsgn/dsgn_run_inference.sh` (see `dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py`) |
-| Checkpoint (**supported**) | `~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar` |
-| Checkpoint (legacy) | Arka `finetune_60`: do **not** re-infer on PT 2.6; use precomputed dumps only |
-
-`scripts/dsgn/dsgn_run_inference.sh` defaults to **`finetune_48`** and the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images. Full patch pipeline: [`PATCH_OPTIMIZATION.md`](PATCH_OPTIMIZATION.md).
-
-**Inference** (`dsgn/dsgn_run_inference.sh` moves KITTI txt to `dsgn/detections/adria/<tag>/`):
-
-```bash
-# Clean images, full offline split (default)
-bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
-
-# Patched images (adversarial)
-DATA_PATH=~/summer26/dsgn/datasets/adria/testing_offline_patched \
-  TAG=_patched_100_135 \
-  bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
-
-# Clean images, 3-frame validation split
-SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt \
-  TAG=_validate_clean \
-  bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
-```
-
-Manual equivalent (clean default; create `data/awsim` symlinks first, or use `dsgn/dsgn_run_inference.sh`):
-
-```bash
-cd ~/summer26/external/DSGN_custom
-
-python3 tools/test_no_eval.py \
-  --cfg configs/config_car_12g_awsim.py \
-  --data_path ~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline \
-  --split_file ~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt \
-  --loadmodel ~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar \
-  -btest 1 \
-  -d 0
-```
-
-
-Copy outputs into the mount path Autoware sees, e.g.:
-
-```bash
-cp -r ~/summer26/dsgn/detections/adria/patched_100_135 \
-      ~/summer26/src/dsgn_offline/resource/awsim_output_adversarial
-```
-
-Replay:
-
-```bash
-DETECTION_FOLDER=/home/aw/ros2_ws/src/dsgn_offline/resource/awsim_output_adversarial \
-  bash /home/aw/scripts/dsgn_offline_run.sh
-```
-
-Adjust `--tag` on `test_no_eval.py` if you need a distinct output subdirectory name.
-
----
-
-## Troubleshooting
-
-
-| Issue                     | Action                                                                      |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `package.xml not found`   | Add `src/` volume mount; restart container                                  |
-| `overlay not built`       | Run Step 2                                                                  |
-| MRM / engage blocked      | Unrelated to DSGN. Run `data/autoware_data/diagnose_stuck.sh` and `inspect_emergency.sh` |
-| Detections in wrong place | Ego not on Arka path; check pose vs `path.txt`                              |
-| `ros2` shows few topics   | `ros2 daemon stop && ros2 daemon start`; wait ~2–3 min after Autoware start |
-
 
 ---
 
