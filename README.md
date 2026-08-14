@@ -266,13 +266,6 @@ docker run --rm -it \
   '
 ```
 
-`unset ROS_DISTRO` is **required**, not cosmetic. With it set, `ros2-for-unity` takes a
-slower "ROS is sourced" init path and the scene can finish loading first, in which case
-every C# publisher dies with `topic name is invalid` (camera, pose, odometry, IMU). It is
-a race, so it sometimes appears to work; it is much more likely to lose when Autoware is
-already running and loading the GPU. Always confirm with `ros2 topic list` rather than
-trusting that the window looks normal. Swap `extracted/` → `modded/` for the stereo build.
-
 **Scripted (no clicking):** `scripts/awsim/awsim_launch.sh [pristine|modded]`, then
 `scripts/awsim/awsim_verify.sh <container>`. This passes `--config` so the scene auto-loads,
 which additionally requires scrubbing `ROS_DISTRO` to avoid a startup race that kills
