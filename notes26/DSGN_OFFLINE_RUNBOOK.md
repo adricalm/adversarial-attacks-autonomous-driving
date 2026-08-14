@@ -97,7 +97,7 @@ A straigtfoward approach is to just visualize the bounding boxes in Rviz (make s
 
 ---
 
-## 5. Test attacked frames
+## 4. Test attacked frames
 
 Relaunch with alternate folder:
 
