@@ -26,15 +26,8 @@ head -3 /home/aw/ros2_ws/src/dsgn_offline/resource/path.txt
 
 ---
 
-## 1. Restart Autoware (**host**)
 
-Use the **canonical** `docker run` from the README (mounts `src/` and `scripts/`).
-
-**Why:** `dsgn_offline` must be built inside the image (needs `autoware_perception_msgs`). `src/` exposes the package; `scripts/` exposes build/run helpers.
-
----
-
-## 2. Build ROS 2 overlay (**inside Docker**)
+## 1. Build ROS 2 overlay (**inside Docker**)
 
 ```bash
 docker exec -it autoware_full_test bash
@@ -59,7 +52,7 @@ source install/setup.bash
 
 ---
 
-## 3. Run `dsgn_offline` (**inside Docker**, second shell or background)
+## 2. Run `dsgn_offline` (**inside Docker**, second shell or background)
 
 Stack must be up with localization + route. If AWSIM was restarted, re-init the route:
 
@@ -94,7 +87,7 @@ Watch node logs for `Published detection from: NNNNNN.txt` and `Detection file n
 
 ---
 
-## 4. Verify detection → tracking chain (**inside Docker**)
+## 3. Verify detection → tracking chain (**inside Docker**)
 
 ```bash
 ros2 topic hz /perception/object_recognition/detection/objects
@@ -120,7 +113,7 @@ ros2 topic echo /perception/object_recognition/tracking/objects --once
 
 ---
 
-## 5. Confirm planner reaction (**inside Docker** + RViz)
+## 4. Confirm planner reaction (**inside Docker** + RViz)
 
 RViz: enable perception object displays; check markers near ego.
 
@@ -134,7 +127,7 @@ Stop the node (Ctrl+C) and confirm behavior returns toward baseline when objects
 
 ---
 
-## 6. Output-space attack (no ML) (**host** + **inside Docker**)
+## 5. Output-space attack (no ML) (**host** + **inside Docker**)
 
 Copy clean outputs before editing:
 
@@ -158,7 +151,7 @@ DETECTION_FOLDER=/home/aw/ros2_ws/src/dsgn_offline/resource/awsim_output_attack_
 
 ---
 
-## 7. Image-space patch attack (later) (**host**, GPU / PyTorch)
+## 6. Image-space patch attack (later) (**host**, GPU / PyTorch)
 
 Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its README for `setup.py` + CUDA deps).
 
