@@ -233,22 +233,23 @@ bash /home/aw/scripts/dsgn_offline_run.sh
 
 ### AWSIM (inside Docker, with GUI)
 
-AWSIM runs inside Docker (needs GUI access via `DISPLAY`/X11, i.e. the xrdp desktop,
-normally `:10`). It **cannot** run natively on the host: a host run dies with
-`UnsatisfiedLinkError: librcl.so`.
+AWSIM runs inside Docker (xrdp desktop, usually `DISPLAY=:10`). It **cannot** run natively on the host.
 
-Do **not** source ROS 2 for the AWSIM process. Its `ros2-for-unity` is a standalone
-build with its own ROS 2 libraries. Also unset the ament/colcon prefix paths.
+Do **not** source ROS 2 for the AWSIM process. Its `ros2-for-unity` is a standalone build. The command below unsets the ament/colcon prefix paths for that reason.
 
-**Manual / interactive (proven, uses the GUI `Load` button):**
+**Canonical launch (interactive, GUI Load button):**
 
 ```bash
+# on host, once
+export DISPLAY=:10
+xhost +local:root   # or: xhost +local:
+
 cd ~/summer26/data/awsim
-docker run --rm -it \
+sudo docker run --rm -it \
   --name awsim_gui_test \
   --device nvidia.com/gpu=all \
   --network host \
-  -e DISPLAY="$DISPLAY" \
+  -e DISPLAY=:10 \
   -e HOME=/home/aw \
   -e ROS_DOMAIN_ID=26 \
   -e NVIDIA_DRIVER_CAPABILITIES=all \
@@ -262,15 +263,49 @@ docker run --rm -it \
     export ROS_DOMAIN_ID=26
     export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
     cd /home/aw/awsim
-    ./extracted/awsim_labs_v1.6.1/awsim_labs.x86_64
+    ./modded/awsim_labs_v1.6.1/awsim_labs.x86_64
   '
 ```
 
-**Scripted (no clicking):** `scripts/awsim/awsim_launch.sh [pristine|modded]`, then
-`scripts/awsim/awsim_verify.sh <container>`. This passes `--config` so the scene auto-loads,
-which additionally requires scrubbing `ROS_DISTRO` to avoid a startup race that kills
-every C# publisher (`/clock`, camera, vehicle status). See
-[`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md).
+**Build choice:** default above uses `modded/` (stereo build). For pristine baseline, use `./extracted/awsim_labs_v1.6.1/awsim_labs.x86_64` instead.
+
+Pick map / ego / position in the AWSIM window and click **Load**. Then verify (second terminal):
+
+```bash
+export ROS_DOMAIN_ID=26
+bash ~/summer26/scripts/awsim/awsim_verify.sh awsim_gui_test
+```
+
+**Alternative:** `scripts/awsim/awsim_launch.sh [pristine|modded]` auto-loads via `--config` (detached, no clicking). See [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md) for launch gotchas.
+
+### RViz (optional, inside Docker)
+
+Run from the xrdp desktop after Autoware is up:
+
+```bash
+export DISPLAY=:10   # or use echo "$DISPLAY"
+xhost +local:root
+
+sudo docker run --rm -it \
+  --name autoware_rviz_test \
+  --device nvidia.com/gpu=all \
+  --network host \
+  -e DISPLAY="$DISPLAY" \
+  -e HOME=/home/aw \
+  -e ROS_DOMAIN_ID=26 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  --entrypoint /bin/bash \
+  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
+  -lc '
+    source /opt/ros/humble/setup.bash
+    source /opt/autoware/setup.bash
+    unset CYCLONEDDS_URI
+    export ROS_DOMAIN_ID=26
+    rviz2 -d /opt/autoware/autoware_launch/share/autoware_launch/rviz/autoware.rviz
+  '
+```
+
+With `launch_rviz_adaptors:=true` on Autoware, RViz **2D Rough Goal Pose** sets routes via `/api/routing/set_route_points`.
 
 ---
 
@@ -332,7 +367,7 @@ Shared tools under `scripts/` (mounted at `/home/aw/scripts`). Session diagnosti
 
 | Script | Purpose |
 |--------|---------|
-| `awsim/awsim_launch.sh` | Launch AWSIM (`pristine`/`modded`) in Docker with correct env |
+| `awsim/awsim_launch.sh` | Optional: launch AWSIM detached with `--config` auto-load |
 | `awsim/awsim_verify.sh` | Check AWSIM topics, rates, live camera geometry |
 | `awsim/awsim_stereo_build.sh` | Compile the stereo-camera mod (`StereoMod.dll`) |
 | `awsim/awsim_stereo_install.py` | Register/`--uninstall` the mod in `modded/` |

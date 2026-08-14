@@ -6,7 +6,7 @@ This is intentionally a Docker setup. The server host is newer than the supporte
 
 - `ROOT` is the only path that normally needs changing. It is the checkout directory; default is `~/summer26`.
 - Keep `DOMAIN=26` for this checkout. A ROS domain is not machine-specific, but every ROS process must use the same one. Several helper scripts currently embed `26`, so changing it means updating those scripts consistently.
-- `MAP_NAME`, `IMAGE`, `AUTOWARE_CONTAINER`, and `AWSIM_DISPLAY` are named settings below.
+- `MAP_NAME`, `IMAGE`, and `AUTOWARE_CONTAINER` are named settings below.
 - The commands assume Docker GPU access is already enabled for the lab user (the `docker run … --device nvidia.com/gpu=all` commands must work).
 
 ### One-time asset check
@@ -79,24 +79,81 @@ docker ps --filter "name=$AUTOWARE_CONTAINER"
 
 Autoware normally needs roughly 2–3 minutes before it is useful. A running container only proves that the launch process has not exited; it does not prove that the system is ready.
 
-### Start and verify AWSIM
+### Start AWSIM
 
-Run this portion from the **local xrdp graphical desktop** (not a plain SSH session). `DISPLAY` must identify that desktop, usually `:10`; use the actual value printed by `echo "$DISPLAY"` rather than assuming it.
+Run from the **local xrdp graphical desktop** (not plain SSH). Use the actual `DISPLAY` if it is not `:10` (`echo "$DISPLAY"`).
 
 ```bash
-export AWSIM_DISPLAY="${AWSIM_DISPLAY:-$DISPLAY}"
-: "${AWSIM_DISPLAY:?Open a terminal in the xrdp desktop or set AWSIM_DISPLAY (usually :10).}"
-xhost +SI:localuser:root
+# on host, once
+export DISPLAY=:10
+xhost +local:root   # or: xhost +local:
 
-cd "$ROOT"
-ROS_DOMAIN_ID="$DOMAIN" AWSIM_DISPLAY="$AWSIM_DISPLAY" \
-  bash scripts/awsim/awsim_launch.sh pristine
-
-# Wait for scene loading (~60–75 s), then require the real ROS publishers.
-ROS_DOMAIN_ID="$DOMAIN" bash scripts/awsim/awsim_verify.sh awsim_pristine
+cd ~/summer26/data/awsim
+sudo docker run --rm -it \
+  --name awsim_gui_test \
+  --device nvidia.com/gpu=all \
+  --network host \
+  -e DISPLAY=:10 \
+  -e HOME=/home/aw \
+  -e ROS_DOMAIN_ID=26 \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v "$HOME/summer26/data/awsim:/home/aw/awsim" \
+  --entrypoint /bin/bash \
+  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
+  -lc '
+    unset CYCLONEDDS_URI
+    unset ROS_DISTRO AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
+    export ROS_DOMAIN_ID=26
+    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    cd /home/aw/awsim
+    ./modded/awsim_labs_v1.6.1/awsim_labs.x86_64
+  '
 ```
 
-Use `scripts/awsim/awsim_launch.sh modded` only for the stereo build. Do not source `/opt/ros/...` before launching AWSIM: its bundled `ros2-for-unity` library must not inherit Autoware's ROS environment. The launch script removes those variables for this reason. `scripts/awsim/awsim_verify.sh` is the gate: a normal-looking GUI without `/clock`, camera, and LiDAR topics is a failed launch.
+**Build choice:** use `modded/` for the stereo build (default above). For the pristine baseline, switch to `./extracted/awsim_labs_v1.6.1/awsim_labs.x86_64`.
+
+In the AWSIM window, pick map / ego / position and click **Load**. Do **not** source `/opt/ros/...` before launching AWSIM.
+
+After the scene loads, confirm ROS topics in a second terminal (optional but recommended):
+
+```bash
+export ROS_DOMAIN_ID=26
+bash ~/summer26/scripts/awsim/awsim_verify.sh awsim_gui_test
+```
+
+A normal-looking GUI without `/clock`, camera, and LiDAR topics is a failed launch. See [`AWSIM_STEREO_CAMERA.md`](AWSIM_STEREO_CAMERA.md) for the `ROS_DISTRO` race if that happens.
+
+**Alternative:** `scripts/awsim/awsim_launch.sh [pristine|modded]` auto-loads via `--config` (detached container, no GUI clicking). The command above is the usual interactive workflow.
+
+### Start RViz (optional)
+
+Run from the xrdp desktop (same `DISPLAY` as AWSIM). Start after Autoware is up; RViz is optional for visualization and manual routing.
+
+```bash
+export DISPLAY=:10   # or echo "$DISPLAY" and use that value
+xhost +local:root    # if not already done for AWSIM
+
+sudo docker run --rm -it \
+  --name autoware_rviz_test \
+  --device nvidia.com/gpu=all \
+  --network host \
+  -e DISPLAY="$DISPLAY" \
+  -e HOME=/home/aw \
+  -e ROS_DOMAIN_ID=26 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  --entrypoint /bin/bash \
+  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
+  -lc '
+    source /opt/ros/humble/setup.bash
+    source /opt/autoware/setup.bash
+    unset CYCLONEDDS_URI
+    export ROS_DOMAIN_ID=26
+    rviz2 -d /opt/autoware/autoware_launch/share/autoware_launch/rviz/autoware.rviz
+  '
+```
+
+Autoware is launched with `launch_rviz_adaptors:=true`, so RViz's **2D Rough Goal Pose** tool can set a route via `/api/routing/set_route_points`.
 
 ### Initialize, route, and drive
 
@@ -118,6 +175,5 @@ The drive helper clears the old route, publishes the route's initial pose (which
 
 ### Optional layers, added only after baseline motion works
 
-- **RViz:** optional visualization. The launch above includes `launch_rviz_adaptors:=true`, so RViz's *2D Rough Goal Pose* can set a route.
 - **`dsgn_offline`:** build/replay only after the vehicle completes the baseline route. Follow [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md); the `src` and `scripts` mounts above are already present.
 - **Stereo/data recording/patch experiments:** use the modded AWSIM build and the dedicated scripts/runbooks. They are research layers, not startup prerequisites.

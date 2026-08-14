@@ -219,8 +219,8 @@ pipeline. Point the *recorder* at the stock name instead and add only `camera_ri
 
 | Script | Purpose |
 |---|---|
-| `scripts/awsim/awsim_launch.sh [pristine\|modded]` | Launch AWSIM in Docker with the correct scrubbed env |
-| `scripts/awsim/awsim_verify.sh [container]` | Check required topics, rates, and live camera geometry |
+| `scripts/awsim/awsim_launch.sh [pristine\|modded]` | Optional: detached launch with `--config` auto-load |
+| `scripts/awsim/awsim_verify.sh [container]` | Check required topics, rates, and live camera geometry (e.g. `awsim_gui_test`) |
 | `scripts/awsim/awsim_stereo_build.sh` | Compile `StereoMod.dll` in a throwaway Mono container |
 | `scripts/awsim/awsim_stereo_install.py [--uninstall]` | Register/unregister the mod with Unity's loader |
 | `scripts/awsim/awsim_stereo_check.py` | Quantitative stereo validation (run inside the container) |
