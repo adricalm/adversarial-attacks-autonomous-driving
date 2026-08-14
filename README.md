@@ -4,7 +4,7 @@ Research stack for **visual/physical adversarial patches** against a stereo 3D d
 
 **Stack:** AWSIM + Autoware Universe + optional RViz, ROS 2 Humble, Docker with host networking.
 
-**Start here:** [`HANDOFF.md`](HANDOFF.md) (repos, data link, first runs). Detailed commands stay in this README and in [`notes26/`](notes26/).
+**Start here:** [`HANDOFF.md`](HANDOFF.md) (repos, data link, first runs). Stack startup commands: [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md). Other runbooks in [`notes26/`](notes26/).
 
 ---
 
@@ -138,7 +138,13 @@ Offline Autoware replay: [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLIN
 
 ---
 
-## ROS 2 setup (run at the start of every Docker shell)
+## Stack startup
+
+Copy-paste launch commands (Autoware, AWSIM, RViz, drive): **[`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md)**.
+
+**Order:** Autoware (detached) → wait ~2–3 min → AWSIM (Load in GUI) → optional RViz → `drive_route_and_engage.sh`.
+
+**Inside any Autoware container shell:**
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -147,170 +153,10 @@ unset CYCLONEDDS_URI
 export ROS_DOMAIN_ID=26
 ```
 
----
+**Optional workflows (separate runbooks):**
 
-## Launch commands
-
-### Autoware (host; canonical, always use this)
-
-| Mount / flag | Why |
-|---|---|
-| `data/autoware_data/ndt_scan_matcher.param.yaml` | Nishi-Shinjuku scores ~2.2–2.4; default threshold 2.3 trips MRM `emergency_stop` while driving |
-| `data/autoware_data/perception.launch.xml.no_detection` | Disables LiDAR object detection (CenterPoint). Localization LiDAR stays on. |
-| `data/autoware_data/autonomous_emergency_braking.param.yaml` | Sets AEB `use_pointcloud_data: false` so raw LiDAR clusters don’t trigger AEB when detection is off |
-| `launch_rviz_adaptors:=true` | Bridges RViz **2D Rough Goal Pose** clicks to `/api/routing/set_route_points` |
-
-Also mount `scripts/` → `/home/aw/scripts` and `src/` → `/home/aw/ros2_ws/src`.
-
-**Note:** `helpers/spawn_test_npc_car.sh` injects objects via `/simulation/dummy_perception_publisher/object_info` even with CenterPoint off. That is separate from LiDAR detection.
-
-```bash
-docker run --rm -d \
-  --name autoware_full_test \
-  --device nvidia.com/gpu=all \
-  --network host \
-  -e HOME=/home/aw \
-  -e ROS_DOMAIN_ID=26 \
-  -v "$HOME/summer26/data/maps:/home/aw/maps:ro" \
-  -v "$HOME/summer26/data/autoware_data:/home/aw/autoware_data" \
-  -v "$HOME/summer26/data/autoware_data/ndt_scan_matcher.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/localization/ndt_scan_matcher/ndt_scan_matcher.param.yaml" \
-  -v "$HOME/summer26/src:/home/aw/ros2_ws/src:ro" \
-  -v "$HOME/summer26/scripts:/home/aw/scripts:ro" \
-  -v "$HOME/summer26/data/autoware_data/perception.launch.xml.no_detection:/opt/autoware/tier4_perception_launch/share/tier4_perception_launch/launch/perception.launch.xml:ro" \
-  -v "$HOME/summer26/data/autoware_data/autonomous_emergency_braking.param.yaml:/opt/autoware/autoware_launch/share/autoware_launch/config/control/autoware_autonomous_emergency_braking/autonomous_emergency_braking.param.yaml:ro" \
-  --entrypoint /bin/bash \
-  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
-  -lc '
-    source /opt/ros/humble/setup.bash
-    source /opt/autoware/setup.bash
-    unset CYCLONEDDS_URI
-    export ROS_DOMAIN_ID=26
-    MAP=/home/aw/maps/nishishinjuku_autoware_map
-    DATA=/home/aw/autoware_data/ml_models
-    ros2 launch autoware_launch e2e_simulator.launch.xml \
-      vehicle_model:=awsim_labs_vehicle \
-      sensor_model:=awsim_labs_sensor_kit \
-      map_path:="$MAP" \
-      data_path:="$DATA" \
-      launch_vehicle_interface:=true \
-      rviz:=false \
-      rviz_respawn:=false \
-      launch_rviz_adaptors:=true
-  '
-```
-
-### Enter a running Autoware container
-
-```bash
-docker exec -it autoware_full_test bash
-# then source ROS as above
-```
-
-### Drive the car (inside Docker)
-
-After Autoware + AWSIM are up and `/clock` has a publisher:
-
-```bash
-bash /home/aw/scripts/drive_route_and_engage.sh
-# or: bash /home/aw/scripts/drive_route_and_engage.sh /home/aw/autoware_data/route_dsgn_ab.json
-```
-
-From host: `bash ~/summer26/scripts/engage_autoware.sh` (engage + motion check).
-
-**Startup order:** Autoware (detached) → wait ~2–3 min → AWSIM → (optional RViz) → `drive_route_and_engage.sh`.
-
-### DSGN offline overlay (optional)
-
-Replay precomputed KITTI-format detections into Autoware (folder of `.txt` + `path.txt`, **not** a rosbag). **Step-by-step:** [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md).
-
-The canonical `docker run` already mounts `src/` and `scripts/`. Build and run inside the container:
-
-```bash
-source /opt/ros/humble/setup.bash
-source /opt/autoware/setup.bash
-unset CYCLONEDDS_URI
-export ROS_DOMAIN_ID=26
-cd /home/aw/ros2_ws
-colcon build --symlink-install --packages-select dsgn_offline
-source install/setup.bash
-bash /home/aw/scripts/dsgn_offline_run.sh
-```
-
-### AWSIM (inside Docker, with GUI)
-
-AWSIM runs inside Docker (xrdp desktop, usually `DISPLAY=:10`). It **cannot** run natively on the host.
-
-Do **not** source ROS 2 for the AWSIM process. Its `ros2-for-unity` is a standalone build. The command below unsets the ament/colcon prefix paths for that reason.
-
-**Canonical launch (interactive, GUI Load button):**
-
-```bash
-# on host, once
-export DISPLAY=:10
-xhost +local:root   # or: xhost +local:
-
-cd ~/summer26/data/awsim
-sudo docker run --rm -it \
-  --name awsim_gui_test \
-  --device nvidia.com/gpu=all \
-  --network host \
-  -e DISPLAY=:10 \
-  -e HOME=/home/aw \
-  -e ROS_DOMAIN_ID=26 \
-  -e NVIDIA_DRIVER_CAPABILITIES=all \
-  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-  -v "$HOME/summer26/data/awsim:/home/aw/awsim" \
-  --entrypoint /bin/bash \
-  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
-  -lc '
-    unset CYCLONEDDS_URI
-    unset ROS_DISTRO AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH
-    export ROS_DOMAIN_ID=26
-    export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-    cd /home/aw/awsim
-    ./modded/awsim_labs_v1.6.1/awsim_labs.x86_64
-  '
-```
-
-**Build choice:** default above uses `modded/` (stereo build). For pristine baseline, use `./extracted/awsim_labs_v1.6.1/awsim_labs.x86_64` instead.
-
-Pick map / ego / position in the AWSIM window and click **Load**. Then verify (second terminal):
-
-```bash
-export ROS_DOMAIN_ID=26
-bash ~/summer26/scripts/awsim/awsim_verify.sh awsim_gui_test
-```
-
-**Alternative:** `scripts/awsim/awsim_launch.sh [pristine|modded]` auto-loads via `--config` (detached, no clicking). See [`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md) for launch gotchas.
-
-### RViz (optional, inside Docker)
-
-Run from the xrdp desktop after Autoware is up:
-
-```bash
-export DISPLAY=:10   # or use echo "$DISPLAY"
-xhost +local:root
-
-sudo docker run --rm -it \
-  --name autoware_rviz_test \
-  --device nvidia.com/gpu=all \
-  --network host \
-  -e DISPLAY="$DISPLAY" \
-  -e HOME=/home/aw \
-  -e ROS_DOMAIN_ID=26 \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  --entrypoint /bin/bash \
-  ghcr.io/autowarefoundation/autoware:universe-cuda-humble \
-  -lc '
-    source /opt/ros/humble/setup.bash
-    source /opt/autoware/setup.bash
-    unset CYCLONEDDS_URI
-    export ROS_DOMAIN_ID=26
-    rviz2 -d /opt/autoware/autoware_launch/share/autoware_launch/rviz/autoware.rviz
-  '
-```
-
-With `launch_rviz_adaptors:=true` on Autoware, RViz **2D Rough Goal Pose** sets routes via `/api/routing/set_route_points`.
+- Offline DSGN detections in Autoware: [`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md)
+- Patch pipeline: [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md)
 
 ---
 

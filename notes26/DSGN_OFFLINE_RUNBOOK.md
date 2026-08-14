@@ -3,7 +3,7 @@
 Copy-paste commands for replaying Arka's precomputed DSGN detections into Autoware.  
 **You run everything.** This repo only provides scripts and the patched `dsgn_offline` node.
 
-See also: [README DSGN overlay section](../README.md#dsgn-offline-overlay-optional).
+See also: [`autoware-awsim-startup.md`](autoware-awsim-startup.md) (Autoware launch) and [README](../README.md).
 
 ---
 
@@ -11,7 +11,7 @@ See also: [README DSGN overlay section](../README.md#dsgn-offline-overlay-option
 
 Before building or running `dsgn_offline`:
 
-- [ ] Autoware container running (`autoware_full_test`) with **canonical launch** from README (includes `src/` + `scripts/` mounts, NDT bind-mount, `launch_rviz_adaptors:=true`)
+- [ ] Autoware container running (`autoware_full_test`) with **canonical launch** from [`autoware-awsim-startup.md`](autoware-awsim-startup.md) (includes `src/` + `scripts/` mounts, NDT bind-mount, `launch_rviz_adaptors:=true`)
 - [ ] AWSIM running
 - [ ] Localization initialized and route set (`bash /home/aw/scripts/drive_route_and_engage.sh`)
 - [ ] Ego driving or ready to engage (`/autoware/state` → 5)
