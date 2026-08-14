@@ -1,4 +1,4 @@
-# DSGN on AWSIM — findings (Jul 16 2026)
+# DSGN on AWSIM: findings (Jul 16 2026)
 
 Concise log of what we learned fixing stereo 3D detection on AWSIM.  
 Related: [`DSGN_OFFLINE_RUNBOOK.md`](DSGN_OFFLINE_RUNBOOK.md).
@@ -7,11 +7,11 @@ Related: [`DSGN_OFFLINE_RUNBOOK.md`](DSGN_OFFLINE_RUNBOOK.md).
 
 ## Timeline (short)
 
-1. **Hypothesis: PyTorch version** — Official DSGN authors reported a large eval drop when moving past PT 1.3. We blamed PT 2.6 on the L40S for “nonsense” detections (Arka `finetune_60` and early AWSIM runs). That **is still true for Arka’s PT 1.3 AWSIM checkpoint** on this host, but it was **not** the main reason official KITTI `finetune_48` looked broken on AWSIM.
+1. **Hypothesis: PyTorch version.** Official DSGN authors reported a large eval drop when moving past PT 1.3. We blamed PT 2.6 on the L40S for “nonsense” detections (Arka `finetune_60` and early AWSIM runs). That **is still true for Arka’s PT 1.3 AWSIM checkpoint** on this host, but it was **not** the main reason official KITTI `finetune_48` looked broken on AWSIM.
 
-2. **Real AWSIM fix: geometry + config** — Once half-res config matched the loader, **official `finetune_48` produced coherent boxes on AWSIM without finetuning**. Remaining pain: **false positives**.
+2. **Real AWSIM fix: geometry + config.** Once half-res config matched the loader, **official `finetune_48` produced coherent boxes on AWSIM without finetuning**. Remaining pain: **false positives**.
 
-3. **Label convention** — Arka’s AWSIM `label_2` is **not** true KITTI. Early finetunes trained against wrong targets. We documented the remap, converted labels under adria, and started **`det_head` adapt from `finetune_48`**.
+3. **Label convention.** Arka’s AWSIM `label_2` is **not** true KITTI. Early finetunes trained against wrong targets. We documented the remap, converted labels under adria, and started **`det_head` adapt from `finetune_48`**.
 
 ---
 
@@ -26,12 +26,12 @@ In `external/DSGN_custom/configs/config_car_12g_awsim.py`:
 | `input_size` | `[1080, 1920]` | **`[540, 960]`** |
 | `output_size` | `[270, 480]` | **`[135, 240]`** |
 
-`CV_X_MAX` / `CV_Y_MAX` are derived from `input_size` — they follow automatically.
+`CV_X_MAX` / `CV_Y_MAX` are derived from `input_size`; they follow automatically.
 
 Also useful on AWSIM:
 
 - `RPN3D.NMS_THRESH = 0.25` (was 0.6-style / commented)
-- At viz / eval time, raise score floor (`--min-score ~0.3`) — training defaults are low and show many FPs
+- At viz / eval time, raise score floor (`--min-score ~0.3`). Training defaults are low and show many FPs
 
 **Depth GT** under `training/depth/` is **metres** (`depth_disp=True`). Resize the map spatially; do **not** multiply depth values by 0.5.
 
@@ -64,7 +64,7 @@ Script: `scripts/dsgn/dsgn_transform_label.py`
 
 | Path | Role |
 |------|------|
-| `dsgn/datasets/adria/training_kitti_labels/` | **Only training set** — images/calib/depth/velodyne + KITTI-converted `label_2/` |
+| `dsgn/datasets/adria/training_kitti_labels/` | **Only training set:** images/calib/depth/velodyne + KITTI-converted `label_2/` |
 | `dsgn/datasets/arka/dsgn_awsim/testing/` | Arka test split (kept) |
 | `dsgn/datasets/arka/dsgn_awsim/testing_offline/` | Offline / Autoware replay images (kept) |
 | `dsgn/datasets/arka/dsgn_awsim/{train,val,trainval,test}*.txt` | Split lists (kept; `trainval.txt` still indexes training frame IDs) |
@@ -82,13 +82,13 @@ DSGN training **always** expects KITTI via `Object3d`. Raw Arka-format labels �
 | Approach | Status |
 |----------|--------|
 | Ship **`finetune_48`** + half-res config + score thresh | Still the safe default until a full adapt beats it |
-| **`MODE=det_head`** on converted labels | **Tried** — debug viz **not great**; prefer full-model train from `finetune_48` |
+| **`MODE=det_head`** on converted labels | **Tried.** Debug viz **not great**; prefer full-model train from `finetune_48` |
 | **Full-model** on converted labels (Arka-style) | Next: train entire net from `finetune_48` via `dsgn_train.sh` |
 | Arka **`finetune_60`** on this host | Optional A/B via precomputed dumps; PT 2.6 re-inference unfaithful |
 
 Always: converted `label_2` under `training_kitti_labels`, `FORCE_TARGETS=1` when labels change, viz with **`--box-convention kitti`**.
 
-### Full-model train (host) — Arka-style schedule
+### Full-model train (host), Arka-style schedule
 
 Uses `scripts/dsgn/dsgn_train.sh` (full net, lr≈1e-3, 60 ep). Same converted data as det_head:
 

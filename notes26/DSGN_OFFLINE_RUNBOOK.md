@@ -1,7 +1,7 @@
 # DSGN offline runbook
 
 Copy-paste commands for replaying Arka's precomputed DSGN detections into Autoware.  
-**You run everything** — this repo only provides scripts and the patched `dsgn_offline` node.
+**You run everything.** This repo only provides scripts and the patched `dsgn_offline` node.
 
 See also: [README DSGN overlay section](../README.md#dsgn-offline-overlay-optional).
 
@@ -26,7 +26,7 @@ head -3 /home/aw/ros2_ws/src/dsgn_offline/resource/path.txt
 
 ---
 
-## 1. Restart Autoware — **host**
+## 1. Restart Autoware (**host**)
 
 Use the **canonical** `docker run` from the README (mounts `src/` and `scripts/`).
 
@@ -34,7 +34,7 @@ Use the **canonical** `docker run` from the README (mounts `src/` and `scripts/`
 
 ---
 
-## 2. Build ROS 2 overlay — **inside Docker**
+## 2. Build ROS 2 overlay (**inside Docker**)
 
 ```bash
 docker exec -it autoware_full_test bash
@@ -59,7 +59,7 @@ source install/setup.bash
 
 ---
 
-## 3. Run `dsgn_offline` — **inside Docker** (second shell or background)
+## 3. Run `dsgn_offline` (**inside Docker**, second shell or background)
 
 Stack must be up with localization + route. If AWSIM was restarted, re-init the route:
 
@@ -94,7 +94,7 @@ Watch node logs for `Published detection from: NNNNNN.txt` and `Detection file n
 
 ---
 
-## 4. Verify detection → tracking chain — **inside Docker**
+## 4. Verify detection → tracking chain (**inside Docker**)
 
 ```bash
 ros2 topic hz /perception/object_recognition/detection/objects
@@ -109,7 +109,7 @@ ros2 topic echo /perception/object_recognition/tracking/objects --once
 | No detection messages             | Ego pose not initialized; wrong `path_file`; no matching `NNNNNN.txt`  |
 | Detection empty `objects: []`     | Frame index points to empty file (many early indices are empty)        |
 | Detection OK, tracking empty      | Wrong `frame_id`, stale `stamp`, low `existence_probability`, or class |
-| Two publishers on detection topic | Default LiDAR detector still running — may need launch tweak later     |
+| Two publishers on detection topic | Default LiDAR detector still running; may need launch tweak later     |
 
 
 **Known node quirks** (in `dsgn_offline.py`):
@@ -120,7 +120,7 @@ ros2 topic echo /perception/object_recognition/tracking/objects --once
 
 ---
 
-## 5. Confirm planner reaction — **inside Docker** + RViz
+## 5. Confirm planner reaction (**inside Docker** + RViz)
 
 RViz: enable perception object displays; check markers near ego.
 
@@ -134,7 +134,7 @@ Stop the node (Ctrl+C) and confirm behavior returns toward baseline when objects
 
 ---
 
-## 6. Output-space attack (no ML) — **host** + **inside Docker**
+## 6. Output-space attack (no ML) (**host** + **inside Docker**)
 
 Copy clean outputs before editing:
 
@@ -158,7 +158,7 @@ DETECTION_FOLDER=/home/aw/ros2_ws/src/dsgn_offline/resource/awsim_output_attack_
 
 ---
 
-## 7. Image-space patch attack (later) — **host** (GPU / PyTorch)
+## 7. Image-space patch attack (later) (**host**, GPU / PyTorch)
 
 Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its README for `setup.py` + CUDA deps).
 
@@ -168,14 +168,14 @@ Requires DSGN environment from `external/DSGN_custom/` (separate repo; see its R
 | Item | Path |
 | ---- | ---- |
 | Clean dataset (Arka) | `~/summer26/dsgn/datasets/arka/dsgn_awsim/testing_offline/` |
-| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/testing_offline_patched/` — built by `scripts/patch_optimization/apply_face_patch.py` from clean images + localized CSV + `patch_best.png` |
+| Patched dataset (adversarial) | `~/summer26/dsgn/datasets/adria/testing_offline_patched/` (built by `scripts/patch_optimization/apply_face_patch.py` from clean images + localized CSV + `patch_best.png`) |
 | Full offline split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline.txt` (214 frames) |
 | Quick validation split | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt` (frames 000010, 000099, 000105) |
 | Single-frame validation | `~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_frame10.txt` (frame 000010 only) |
 | Patch config | `~/summer26/dsgn/datasets/adria/testing_offline_patched/patches_100_200.csv` |
 | Config | half-res AWSIM config used by `scripts/dsgn/dsgn_run_inference.sh` (see `dsgn/checkpoints/kitti/dsgn_12g_b/save_config_awsim.py`) |
 | Checkpoint (**supported**) | `~/summer26/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar` |
-| Checkpoint (legacy) | Arka `finetune_60` — do **not** re-infer on PT 2.6; use precomputed dumps only |
+| Checkpoint (legacy) | Arka `finetune_60`: do **not** re-infer on PT 2.6; use precomputed dumps only |
 
 `scripts/dsgn/dsgn_run_inference.sh` defaults to **`finetune_48`** and the **clean** Arka dataset (`DATA_PATH=.../testing_offline`, `SPLIT_FILE=.../test_offline.txt`). Override `DATA_PATH` for patched images. Full patch pipeline: [`PATCH_OPTIMIZATION.md`](PATCH_OPTIMIZATION.md).
 
@@ -196,7 +196,7 @@ SPLIT_FILE=~/summer26/dsgn/datasets/arka/dsgn_awsim/test_offline_validate.txt \
   bash ~/summer26/scripts/dsgn/dsgn_run_inference.sh
 ```
 
-Manual equivalent (clean default — create `data/awsim` symlinks first, or use `dsgn/dsgn_run_inference.sh`):
+Manual equivalent (clean default; create `data/awsim` symlinks first, or use `dsgn/dsgn_run_inference.sh`):
 
 ```bash
 cd ~/summer26/external/DSGN_custom
@@ -236,7 +236,7 @@ Adjust `--tag` on `test_no_eval.py` if you need a distinct output subdirectory n
 | ------------------------- | --------------------------------------------------------------------------- |
 | `package.xml not found`   | Add `src/` volume mount; restart container                                  |
 | `overlay not built`       | Run Step 2                                                                  |
-| MRM / engage blocked      | Unrelated to DSGN — run `data/autoware_data/diagnose_stuck.sh` and `inspect_emergency.sh` |
+| MRM / engage blocked      | Unrelated to DSGN. Run `data/autoware_data/diagnose_stuck.sh` and `inspect_emergency.sh` |
 | Detections in wrong place | Ego not on Arka path; check pose vs `path.txt`                              |
 | `ros2` shows few topics   | `ros2 daemon stop && ros2 daemon start`; wait ~2–3 min after Autoware start |
 

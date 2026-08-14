@@ -71,11 +71,11 @@ test -f "$ROOT/dsgn/checkpoints/kitti/dsgn_12g_b/finetune_48.tar"
 
 ## What to run first
 
-1. **Stack:** [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md) — Autoware + AWSIM + drive a saved route.
+1. **Stack:** [`notes26/autoware-awsim-startup.md`](notes26/autoware-awsim-startup.md): Autoware + AWSIM + drive a saved route.
 2. **DSGN inference:** `scripts/dsgn/dsgn_setup_venv.sh` once, then `scripts/dsgn/dsgn_run_inference.sh`. All experiments carried with checkpoint **`finetune_48`** (PyTorch 2.6). Treat Arka’s `finetune_60` as legacy.
 3. **Patches:** [`notes26/PATCH_OPTIMIZATION.md`](notes26/PATCH_OPTIMIZATION.md).
 
-Optional for recording data only: stereo moddification + recording ([`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md)), offline Autoware replay ([`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md)). Note: `dsgn_offline` currently defaults its detection folder to `resource/testing_offline_no_finetune_patched_optimized` — override the ROS parameter if you want a different dump.
+Optional for recording data only: stereo moddification + recording ([`notes26/AWSIM_STEREO_CAMERA.md`](notes26/AWSIM_STEREO_CAMERA.md)), offline Autoware replay ([`notes26/DSGN_OFFLINE_RUNBOOK.md`](notes26/DSGN_OFFLINE_RUNBOOK.md)). Note: `dsgn_offline` currently defaults its detection folder to `resource/testing_offline_no_finetune_patched_optimized`. Override the ROS parameter if you want a different dump.
 
 ## Known caveats
 

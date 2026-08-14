@@ -1,7 +1,7 @@
-# Adding a stereo camera to AWSIM (binary-only) — journey log
+# Adding a stereo camera to AWSIM (binary-only): journey log
 
 Goal: record new KITTI-style stereo datasets like Arka did, but **without AWSIM Unity
-sources** — we only have the prebuilt `awsim_labs_v1.6.1` binary.
+sources**. We only have the prebuilt `awsim_labs_v1.6.1` binary.
 
 Status: **the stereo camera works.** The modded build publishes a validated, rectified
 0.54 m stereo pair (median |dy| = 0.00 px, positive disparity, sane depths) at ~6 Hz,
@@ -21,7 +21,7 @@ needs four topics. Three of them the **stock binary already publishes**:
 | Recorder needs | Stock binary | Gap |
 |---|---|---|
 | `/sensing/camera_left/traffic_light/image_raw` | `/sensing/camera/traffic_light/image_raw` | name only |
-| `/sensing/camera_right/traffic_light/image_raw` | — | **missing** |
+| `/sensing/camera_right/traffic_light/image_raw` |  | **missing** |
 | `/sensing/lidar/top/pointcloud_raw` | same | none |
 | `/perception/.../centerpoint/objects` | from Autoware | none |
 
@@ -68,7 +68,7 @@ camera intrinsics or pose. He centred a stereo rig on the stock camera. Therefor
 - Clone the stock camera, offset the copies by ∓0.27 m in local X. Nothing else changes.
 - Arka's calib files can be reused verbatim.
 - `d = 0` and `r = identity` mean a clone yields a **perfectly rectified, parallel** pair
-  by construction — this is the alignment work that would otherwise be hand-tuned in the
+  by construction. This is the alignment work that would otherwise be hand-tuned in the
   Unity Editor.
 
 Visual cross-check: a frame grabbed from the stock camera and Arka's
@@ -79,7 +79,7 @@ position, horizon and FOV. Saved under `multimedia/awsim_step1/`.
 
 Earlier notes/advice claimed Arka switched to a 128-channel LiDAR. **This is wrong for
 this dataset.** Measured from `testing_offline/velodyne/000000.bin`: 26,996 points with
-16 distinct elevation rings at exactly −15° … +15° in 2° steps — textbook VLP-16, i.e.
+16 distinct elevation rings at exactly −15° … +15° in 2° steps: textbook VLP-16, i.e.
 the stock `SensorVLP16`. The live binary reports width 27,509, height 1. No LiDAR work
 needed.
 
@@ -87,13 +87,13 @@ needed.
 
 | Property | Value | Why it matters |
 |---|---|---|
-| Unity | 2022.3.62f1, URP, x64 | — |
+| Unity | 2022.3.62f1, URP, x64 |  |
 | Scripting backend | **Mono** (`MonoBleedingEdge/`, `Assembly-CSharp.dll` + `.pdb`) | C# is readable/patchable; IL2CPP would have blocked this |
 | Scene container | `awsim_labs_Data/data.unity3d` | readable with UnityPy (41,827 objects) |
 | Source available | public at tag `v1.6.1` | exact-version source to read alongside the DLL |
 
 `AWSIM.CameraSensorHolder` already holds a `List<CameraSensor>` plus `publishHz` and
-`renderInQueue`. **Multi-camera is a native feature** — nothing needs inventing. Setting
+`renderInQueue`. **Multi-camera is a native feature**; nothing needs inventing. Setting
 `renderInQueue = false` renders all cameras on the *same* frame, which is required for a
 valid stereo pair (with `true`, cameras render on consecutive frames and ego motion
 corrupts disparity).
@@ -121,7 +121,7 @@ RuntimeError: topic name is invalid, at ./src/rcl/expand_topic_name.c:73
 NullReferenceException  (in every sensor's FixedUpdate, because the publisher is null)
 ```
 
-Symptom: only 17 topics — no `/clock`, no camera, no vehicle status. Misleading detail:
+Symptom: only 17 topics, no `/clock`, no camera, no vehicle status. Misleading detail:
 the **LiDAR topics still appear**, because RGL publishes through its own native library
 rather than `ros2cs`. So it looks half-working rather than broken.
 
@@ -129,13 +129,13 @@ Measured matrix (all with the map + ego identical):
 
 | `--config` | `ROS_DISTRO` present | Result |
 |---|---|---|
-| yes | yes | **fails** — 17 topics, no `/clock` |
-| yes | scrubbed | works — 31 topics |
-| no (GUI `Load`) | yes | works — 32 topics |
+| yes | yes | **fails** (17 topics, no `/clock`) |
+| yes | scrubbed | works (31 topics) |
+| no (GUI `Load`) | yes | works (32 topics) |
 
 Interpretation: AWSIM's `ros2-for-unity` is a *standalone* build bundling its own ROS 2
 libraries. When it detects a sourced ROS 2 it logs `You should not source ROS2 in
-'ros2-for-unity' standalone build` and takes a slower init path — slow enough that
+'ros2-for-unity' standalone build` and takes a slower init path, slow enough that
 auto-load overtakes it. The human delay of clicking `Load` always wins the race, which
 is why **the pre-existing manual recipe was never broken.** The `ROS_DISTRO` detection
 trigger is baked into the Autoware image as a Docker ENV, so it is present even in a
@@ -153,7 +153,7 @@ Because this is a race and not a hard guarantee, **always run `scripts/awsim/aws
 after launching** rather than assuming a successful start.
 
 Sourcing ROS 2 to *inspect* the graph from another process in the same container is
-always fine — the restriction applies only to the AWSIM process itself.
+always fine. The restriction applies only to the AWSIM process itself.
 
 ### AWSIM cannot run on the host
 
@@ -175,7 +175,7 @@ The working setup is never modified. Layout under `data/awsim/`:
 | Path | Role |
 |---|---|
 | `awsim_labs_v1.6.1.zip` | pristine release, `unzip -t` verified clean |
-| `extracted/awsim_labs_v1.6.1/` | **known-good build — do not modify** |
+| `extracted/awsim_labs_v1.6.1/` | **known-good build; do not modify** |
 | `modded/awsim_labs_v1.6.1/` | working copy for the stereo mod |
 | `PRISTINE_CHECKSUMS.md5` | md5 of 955 binaries/DLLs/scenes in `extracted/` |
 
@@ -206,7 +206,7 @@ unzip data/awsim/awsim_labs_v1.6.1.zip        # ultimate: from the release archi
 ```
 
 `extracted/` is untouched throughout, so **the pipeline you run today is unaffected
-either way** — it launches from `extracted/`, which still passes `md5sum -c`.
+either way**. It launches from `extracted/`, which still passes `md5sum -c`.
 
 **Do not rename the left camera topic in the simulator.** Autoware's traffic-light
 recognition subscribes to `/sensing/camera/traffic_light/image_raw`; renaming it (as
@@ -227,7 +227,7 @@ pipeline. Point the *recorder* at the stock name instead and add only `camera_ri
 
 ---
 
-## Step 3: the mod — DONE, and it works
+## Step 3: the mod is DONE, and it works
 
 ### BepInEx does not work on this build (dead end, ~1 h)
 
@@ -242,7 +242,7 @@ System.MissingMethodException: Method not found: !0 System.Linq.IGrouping`2.get_
 AWSIM was built with Unity **managed-code stripping** enabled, so the shipped
 `System.Core.dll` has had unused LINQ members removed. BepInEx's config system needs
 them. The documented fix is to supply unstripped Unity corlibs, which we do not have
-without a Unity install. Abandoned — see below for the better route.
+without a Unity install. Abandoned; see below for the better route.
 
 Two smaller traps found on the way, worth knowing if BepInEx is ever revisited:
 `run_bepinex.sh` loses its executable bit when unzipped, and it shells out to `file`,
@@ -263,7 +263,7 @@ Unity calls us on the main thread with no injection at all. `loadTypes: 0` is
 `RuntimeInitializeLoadType.AfterSceneLoad`.
 
 This is strictly better than BepInEx or Cecil IL patching: no `LD_PRELOAD`, no
-decompiling, and **no existing game file is rewritten** — we only append to two text
+decompiling, and **no existing game file is rewritten**. We only append to two text
 files and drop one new DLL in `Managed/`.
 
 ### The mod itself (`src/awsim_stereo_mod/StereoMod.cs`)
@@ -271,7 +271,7 @@ files and drop one new DLL in `Managed/`.
 `StereoRig` polls once a second (the ego is spawned well after the scene loads, and F12
 reloads it) and on finding a `CameraSensorHolder` with exactly one sensor:
 
-- sets `renderInQueue = false` so **both cameras render on the same frame** — with the
+- sets `renderInQueue = false` so **both cameras render on the same frame**. With the
   default queue they render on consecutive frames and ego motion corrupts disparity;
 - **clones** the existing `CameraSensor` GameObject, which is what makes the pair
   rectified by construction: rotation, FOV, resolution and clipping planes are inherited
@@ -279,14 +279,14 @@ reloads it) and on finding a `CameraSensorHolder` with exactly one sensor:
 - clones it under a temporary **inactive** parent, so `Awake()`/`Start()` are deferred
   until after the clone's ROS topics have been rewritten (`CameraRos2Publisher.Awake()`
   creates the publishers from those fields, so ordering matters). This also avoids
-  toggling the original — `UICameraBridge` has `OnEnable`/`OnDisable` side effects;
+  toggling the original. `UICameraBridge` has `OnEnable`/`OnDisable` side effects;
 - offsets original and clone by ∓0.27 m along the **camera's own right axis**, converted
   into the parent frame, so it is correct whatever axis convention the parent uses;
 - appends the clone to the private `cameraSensors` list, which the holder re-reads every
   cycle, so it takes effect live.
 
 Field names were confirmed against the compiled `Assembly-CSharp.dll` metadata (via
-`dnfile`) before writing any code — they match the public v1.6.1 source exactly.
+`dnfile`) before writing any code. They match the public v1.6.1 source exactly.
 
 The mod avoids `System.Linq` entirely, for the same stripping reason that killed BepInEx.
 
@@ -321,13 +321,13 @@ recording (the recorder uses a hardcoded `base_link`→camera transform, not TF)
 traffic lights are forced green anyway, but do not rely on that camera for precise
 map projection.
 
-The alternative — leave the left camera at the stock pose and put the right at +0.54 m —
+The alternative (leave the left camera at the stock pose and put the right at +0.54 m)
 avoids the discrepancy but no longer matches Arka's `P2`/`P3`, which place the two
 cameras symmetrically at ∓0.27 m about the reference frame.
 
 ### Open question for later
 
-Arka's `R0_rect` is not identity — it is real-KITTI's `R0_rect` (~0.5° rotation) copied
+Arka's `R0_rect` is not identity. It is real-KITTI's `R0_rect` (~0.5° rotation) copied
 verbatim, as is his `Tr_imu_to_velo`. The true AWSIM value is identity (live `camera_info`
 `r` = identity). His `Tr_velo_to_cam` is also hand-rounded and implies a LiDAR frame
 rotated 90° from the KITTI convention. Decide whether to reproduce his calib exactly (for

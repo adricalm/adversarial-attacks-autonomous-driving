@@ -24,7 +24,7 @@ recordings (KITTI layout)
     → optimize_patch.py               # universal patch → patch_train/face050/patch_best.png
     → apply_face_patch.py             # paste patch onto test stereo → patched KITTI tree
     → eval_patch.py / attack_stats.py # offline metrics
-    → (optional) dsgn_offline replay  # Autoware behavior — see DSGN_OFFLINE_RUNBOOK.md
+    → (optional) dsgn_offline replay  # Autoware behavior; see DSGN_OFFLINE_RUNBOOK.md
 ```
 
 ---
@@ -102,7 +102,7 @@ $VENV scripts/patch_optimization/eval_patch.py \
   --val-csv dsgn/datasets/adria/patch_train/val.csv
 ```
 
-Or compare full detection folders (clean vs patched re-inference) with `attack_stats.py` — see its docstring.
+Or compare full detection folders (clean vs patched re-inference) with `attack_stats.py`. See its docstring.
 
 ## 6. Optional: Autoware replay
 
@@ -119,4 +119,4 @@ Re-run DSGN on the patched images, copy `.txt` dumps into `src/dsgn_offline/reso
 | `dsgn/datasets/adria/patch_train/` | Combined optimize view + run outputs (`face050/`, …) |
 | `dsgn/datasets/adria/patch_test/` | Patched test trees ready for re-inference |
 
-Script flags and edge cases: read the docstring at the top of each file — that is the source of truth.
+Script flags and edge cases: read the docstring at the top of each file. That is the source of truth.
